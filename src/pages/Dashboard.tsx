@@ -10,6 +10,7 @@ import {
   Settings, LogOut, ChevronRight, Menu, X, Shield, Brain,
 } from "lucide-react";
 import { AGENTS_CONFIG, AgentCode } from "@/lib/agents";
+import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
 
 const AGENTS = Object.values(AGENTS_CONFIG);
 
@@ -30,6 +31,7 @@ const Dashboard = () => {
   const [profile, setProfile] = useState<{ name: string; plan: string } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  useRealtimeNotifications(user?.id);
 
   useEffect(() => {
     if (!user) return;
