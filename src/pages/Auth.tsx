@@ -29,7 +29,7 @@ const Auth = () => {
         if (error) throw error;
         navigate("/dashboard");
       } else if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -38,7 +38,11 @@ const Auth = () => {
           },
         });
         if (error) throw error;
-        toast({ title: "Conta criada!", description: "Verifique seu email para confirmar." });
+        if (data.session) {
+          navigate("/onboarding");
+        } else {
+          toast({ title: "Conta criada!", description: "Verifique seu email para confirmar." });
+        }
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/reset-password`,
