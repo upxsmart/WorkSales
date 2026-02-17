@@ -7,19 +7,11 @@ import { Progress } from "@/components/ui/progress";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, FolderKanban, Bot, FileText, BarChart3,
-  Settings, LogOut, Users, Target, Workflow, MessageSquare,
-  PenTool, Palette, Compass, ChevronRight, Menu, X,
+  Settings, LogOut, ChevronRight, Menu, X,
 } from "lucide-react";
+import { AGENTS_CONFIG, AgentCode } from "@/lib/agents";
 
-const AGENTS = [
-  { code: "AA-D100", name: "Análise de Audiência", icon: Users, description: "Micro-personas e Dream 100", color: "from-blue-500 to-indigo-600" },
-  { code: "AO-GO", name: "Otimização de Ofertas", icon: Target, description: "Escada de Valor e copy", color: "from-emerald-500 to-teal-600" },
-  { code: "AJ-AF", name: "Jornada e Funil", icon: Workflow, description: "Automação e lead scoring", color: "from-orange-500 to-amber-600" },
-  { code: "AE-C", name: "Engajamento", icon: MessageSquare, description: "Scripts e qualificação", color: "from-pink-500 to-rose-600" },
-  { code: "AM-CC", name: "Marketing e Conteúdo", icon: PenTool, description: "Páginas, emails e hooks", color: "from-violet-500 to-purple-600" },
-  { code: "AC-DC", name: "Design e Criativos", icon: Palette, description: "Briefings visuais e specs", color: "from-cyan-500 to-blue-600" },
-  { code: "ACO", name: "Orquestrador Central", icon: Compass, description: "Diagnóstico e plano de ação", color: "from-accent to-yellow-600" },
-];
+const AGENTS = Object.values(AGENTS_CONFIG);
 
 const NAV_ITEMS = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
@@ -130,27 +122,30 @@ const Dashboard = () => {
           <div>
             <h3 className="font-display text-xl font-bold mb-4">Seus 7 Agentes de IA</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {AGENTS.map((agent, i) => (
-                <motion.div
-                  key={agent.code}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="glass glass-hover rounded-xl p-5 flex flex-col cursor-pointer group"
-                  onClick={() => navigate(`/agent/${agent.code}`)}
-                >
-                  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${agent.color} flex items-center justify-center mb-3`}>
-                    <agent.icon className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="text-xs text-muted-foreground font-mono">{agent.code}</span>
-                  <h4 className="font-display font-semibold mt-1">{agent.name}</h4>
-                  <p className="text-xs text-muted-foreground mt-1 flex-1">{agent.description}</p>
-                  <Button size="sm" variant="ghost" className="mt-3 self-start group-hover:text-primary transition-colors">
-                    Iniciar
-                    <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </motion.div>
-              ))}
+              {AGENTS.map((agent, i) => {
+                const IconComp = agent.icon;
+                return (
+                  <motion.div
+                    key={agent.code}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="glass glass-hover rounded-xl p-5 flex flex-col cursor-pointer group"
+                    onClick={() => navigate(`/agent/${agent.code}`)}
+                  >
+                    <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${agent.color} flex items-center justify-center mb-3`}>
+                      <IconComp className="w-5 h-5 text-white" />
+                    </div>
+                    <span className="text-xs text-muted-foreground font-mono">{agent.code}</span>
+                    <h4 className="font-display font-semibold mt-1">{agent.name}</h4>
+                    <p className="text-xs text-muted-foreground mt-1 flex-1">{agent.description}</p>
+                    <Button size="sm" variant="ghost" className="mt-3 self-start group-hover:text-primary transition-colors">
+                      Iniciar
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </Button>
+                  </motion.div>
+                );
+              })}
             </div>
           </div>
         </div>

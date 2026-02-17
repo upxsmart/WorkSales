@@ -14,6 +14,7 @@ export function useAgentChat() {
     async (
       input: string,
       agentName: string,
+      projectId?: string,
       projectContext?: Record<string, unknown>
     ) => {
       const userMsg: Message = { role: "user", content: input };
@@ -46,6 +47,7 @@ export function useAgentChat() {
           body: JSON.stringify({
             messages: allMessages,
             agentName,
+            projectId,
             projectContext,
           }),
         });

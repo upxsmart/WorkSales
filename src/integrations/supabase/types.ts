@@ -19,24 +19,33 @@ export type Database = {
           agent_name: string
           created_at: string
           id: string
+          is_approved: boolean
           output_data: Json
+          output_type: string
           project_id: string
+          title: string
           version: number
         }
         Insert: {
           agent_name: string
           created_at?: string
           id?: string
+          is_approved?: boolean
           output_data?: Json
+          output_type?: string
           project_id: string
+          title?: string
           version?: number
         }
         Update: {
           agent_name?: string
           created_at?: string
           id?: string
+          is_approved?: boolean
           output_data?: Json
+          output_type?: string
           project_id?: string
+          title?: string
           version?: number
         }
         Relationships: [
@@ -48,6 +57,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      agent_prompts: {
+        Row: {
+          agent_code: string
+          created_at: string
+          id: string
+          is_active: boolean
+          system_prompt: string
+          version: number
+        }
+        Insert: {
+          agent_code: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          system_prompt: string
+          version?: number
+        }
+        Update: {
+          agent_code?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          system_prompt?: string
+          version?: number
+        }
+        Relationships: []
       }
       agent_tasks: {
         Row: {
