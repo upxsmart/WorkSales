@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AdminRoute from "@/components/AdminRoute";
+import DashboardLayout from "@/components/DashboardLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
@@ -14,6 +15,7 @@ import Dashboard from "./pages/Dashboard";
 import AgentChat from "./pages/AgentChat";
 import Orchestrator from "./pages/Orchestrator";
 import Metrics from "./pages/Metrics";
+import Projects from "./pages/Projects";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAgents from "./pages/admin/AdminAgents";
 import AdminKnowledge from "./pages/admin/AdminKnowledge";
@@ -42,14 +44,12 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
+            {/* Dashboard shell with sidebar */}
+            <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/projects" element={<Projects />} />
+              <Route path="/metrics" element={<Metrics />} />
+            </Route>
             <Route
               path="/agent/ACO"
               element={
@@ -63,14 +63,6 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AgentChat />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/metrics"
-              element={
-                <ProtectedRoute>
-                  <Metrics />
                 </ProtectedRoute>
               }
             />
