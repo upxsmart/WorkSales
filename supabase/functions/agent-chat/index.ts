@@ -25,8 +25,8 @@ serve(async (req) => {
   try {
     const { messages, agentName, projectId, projectContext } = await req.json();
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -94,26 +94,25 @@ serve(async (req) => {
 
     const fullSystemPrompt = systemPrompt + knowledgeContext + contextNote + crossAgentContext;
 
-    // 4. Convert messages to Anthropic format
-    const anthropicMessages = messages.map((m: { role: string; content: string }) => ({
-      role: m.role === "user" ? "user" : "assistant",
-      content: m.content,
-    }));
+    // 4. Build messages array for OpenAI-compatible API
+    const apiMessages = [
+      { role: "system", content: fullSystemPrompt },
+      ...messages.map((m: { role: string; content: string }) => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.content,
+      })),
+    ];
 
-    // 5. Call Anthropic API with streaming
-    const model = "claude-sonnet-4-20250514";
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    // 5. Call Lovable AI Gateway (OpenAI-compatible) with streaming
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model,
-        max_tokens: 4096,
-        system: fullSystemPrompt,
-        messages: anthropicMessages,
+        model: "google/gemini-3-flash-preview",
+        messages: apiMessages,
         stream: true,
       }),
     });
@@ -125,45 +124,22 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const t = await response.text();
-      console.error("Anthropic API error:", response.status, t);
-      return new Response(JSON.stringify({ error: "Erro na API da Anthropic" }), {
+      console.error("AI Gateway error:", response.status, t);
+      return new Response(JSON.stringify({ error: "Erro na API de IA" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // 6. Transform Anthropic SSE stream to OpenAI-compatible format
-    const transformStream = new TransformStream({
-      transform(chunk, controller) {
-        const text = new TextDecoder().decode(chunk);
-        const lines = text.split("\n");
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const jsonStr = line.slice(6).trim();
-          if (!jsonStr) continue;
-
-          try {
-            const event = JSON.parse(jsonStr);
-            if (event.type === "content_block_delta" && event.delta?.text) {
-              const openAIChunk = {
-                choices: [{ delta: { content: event.delta.text } }],
-              };
-              controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(openAIChunk)}\n\n`));
-            } else if (event.type === "message_stop") {
-              controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
-            }
-          } catch {
-            // ignore parse errors
-          }
-        }
-      },
-    });
-
-    const transformedStream = response.body!.pipeThrough(transformStream);
-
-    return new Response(transformedStream, {
+    // 6. Stream response directly (already OpenAI-compatible format)
+    return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
