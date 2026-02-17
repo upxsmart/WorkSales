@@ -16,6 +16,7 @@ import AgentChat from "./pages/AgentChat";
 import Orchestrator from "./pages/Orchestrator";
 import Metrics from "./pages/Metrics";
 import Projects from "./pages/Projects";
+import Agents from "./pages/Agents";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAgents from "./pages/admin/AdminAgents";
 import AdminKnowledge from "./pages/admin/AdminKnowledge";
@@ -48,6 +49,7 @@ const App = () => (
             <Route element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/projects" element={<Projects />} />
+              <Route path="/agents" element={<Agents />} />
               <Route path="/metrics" element={<Metrics />} />
             </Route>
             <Route
