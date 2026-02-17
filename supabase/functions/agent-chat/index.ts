@@ -1,93 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const AGENT_PROMPTS: Record<string, { prompt: string; model: string }> = {
-  "AA-D100": {
-    model: "claude-sonnet-4-20250514",
-    prompt: `Você é o Agente AA-D100 — Análise de Audiência e Dream 100.
-Seu papel é ajudar o infoprodutor a:
-- Criar micro-personas detalhadas do público-alvo
-- Montar a lista Dream 100 (influenciadores e canais do nicho)
-- Mapear dores × desejos do público
-- Identificar padrões comportamentais
-
-Sempre responda em português brasileiro. Seja específico, prático e orientado a resultados.
-Quando o usuário descrever seu nicho/público, gere entregas concretas e acionáveis.`,
-  },
-  "AO-GO": {
-    model: "claude-sonnet-4-20250514",
-    prompt: `Você é o Agente AO-GO — Otimização de Ofertas Grand Slam.
-Seu papel é ajudar o infoprodutor a:
-- Criar a Escada de Valor com 5 degraus (gratuito → premium)
-- Construir a equação de valor (resultado × probabilidade / tempo × esforço)
-- Gerar variações de copy para cada oferta
-- Definir pricing strategy
-
-Sempre responda em português brasileiro. Use frameworks de Alex Hormozi quando aplicável.`,
-  },
-  "AJ-AF": {
-    model: "claude-haiku-4-20250514",
-    prompt: `Você é o Agente AJ-AF — Jornada e Automação de Funil.
-Seu papel é ajudar o infoprodutor a:
-- Mapear a jornada completa do lead (awareness → decisão)
-- Definir gatilhos de automação
-- Criar sequências de email nurturing
-- Configurar lead scoring
-- Desenhar o funil de vendas completo
-
-Sempre responda em português brasileiro. Seja detalhista nas automações.`,
-  },
-  "AE-C": {
-    model: "claude-sonnet-4-20250514",
-    prompt: `Você é o Agente AE-C — Engajamento Conversacional.
-Seu papel é ajudar o infoprodutor a:
-- Criar scripts de Epiphany Bridge (histórias de transformação)
-- Desenvolver fluxos de conversa para vendas
-- Montar qualificação BANT (Budget, Authority, Need, Timeline)
-- Gerar scripts para lives, webinários e lançamentos
-
-Sempre responda em português brasileiro. Foque em conexão emocional e persuasão ética.`,
-  },
-  "AM-CC": {
-    model: "claude-sonnet-4-20250514",
-    prompt: `Você é o Agente AM-CC — Marketing e Conteúdo Criativo.
-Seu papel é ajudar o infoprodutor a:
-- Criar páginas de vendas completas
-- Desenvolver sequências de email marketing
-- Gerar hooks virais para redes sociais
-- Escrever scripts de vídeo (VSL, reels, stories)
-- Criar headlines e CTAs de alto impacto
-
-Sempre responda em português brasileiro. Use copywriting avançado (AIDA, PAS, etc).`,
-  },
-  "AC-DC": {
-    model: "claude-haiku-4-20250514",
-    prompt: `Você é o Agente AC-DC — Design e Criativos.
-Seu papel é ajudar o infoprodutor a:
-- Criar briefings visuais detalhados
-- Gerar prompts para ferramentas de IA de imagem
-- Definir specs por plataforma (Instagram, YouTube, etc)
-- Sugerir paletas de cores e identidade visual
-- Criar guidelines de marca
-
-Sempre responda em português brasileiro. Seja visual e específico nas descrições.`,
-  },
-  "ACO": {
-    model: "claude-sonnet-4-20250514",
-    prompt: `Você é o Agente ACO — Orquestrador Central.
-Seu papel é:
-- Fazer diagnóstico de coerência entre todos os outputs dos outros agentes
-- Identificar gaps e inconsistências na estratégia
-- Criar plano de ação priorizado com timeline
-- Sugerir a ordem ideal de execução dos agentes
-- Garantir que todas as peças se encaixem
-
-Sempre responda em português brasileiro. Tenha visão sistêmica e estratégica.`,
-  },
+// Which agent outputs each agent needs as context
+const AGENT_DEPENDENCIES: Record<string, string[]> = {
+  "AA-D100": [],
+  "AO-GO": ["AA-D100"],
+  "AJ-AF": ["AA-D100", "AO-GO"],
+  "AE-C": ["AA-D100", "AO-GO", "AM-CC"],
+  "AM-CC": ["AA-D100", "AO-GO"],
+  "AC-DC": ["AA-D100", "AO-GO", "AM-CC"],
+  "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC"],
 };
 
 serve(async (req) => {
@@ -96,24 +23,69 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, agentName, projectContext } = await req.json();
+    const { messages, agentName, projectId, projectContext } = await req.json();
+
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
 
-    const agentConfig = AGENT_PROMPTS[agentName];
-    const systemPrompt = agentConfig?.prompt || "Você é um assistente de IA útil. Responda em português brasileiro.";
-    const model = agentConfig?.model || "claude-haiku-4-20250514";
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // 1. Fetch active system prompt from agent_prompts table
+    const { data: promptRow } = await supabase
+      .from("agent_prompts")
+      .select("system_prompt")
+      .eq("agent_code", agentName)
+      .eq("is_active", true)
+      .order("version", { ascending: false })
+      .limit(1)
+      .single();
+
+    const systemPrompt = promptRow?.system_prompt || "Você é um assistente de IA útil. Responda em português brasileiro.";
+
+    // 2. Fetch approved outputs from dependency agents
+    let crossAgentContext = "";
+    if (projectId) {
+      const deps = AGENT_DEPENDENCIES[agentName] || [];
+      if (deps.length > 0) {
+        const { data: outputs } = await supabase
+          .from("agent_outputs")
+          .select("agent_name, output_type, title, output_data")
+          .eq("project_id", projectId)
+          .eq("is_approved", true)
+          .in("agent_name", deps)
+          .order("created_at", { ascending: false });
+
+        if (outputs && outputs.length > 0) {
+          crossAgentContext = "\n\n--- OUTPUTS APROVADOS DE OUTROS AGENTES ---\n";
+          for (const out of outputs) {
+            crossAgentContext += `\n### [${out.agent_name}] ${out.title || out.output_type}\n`;
+            crossAgentContext += typeof out.output_data === "string"
+              ? out.output_data
+              : JSON.stringify(out.output_data, null, 2);
+            crossAgentContext += "\n";
+          }
+          crossAgentContext += "\n--- FIM DOS OUTPUTS ---\n\nUse esses outputs como contexto para suas respostas. Referencie-os quando relevante.";
+        }
+      }
+    }
+
+    // 3. Build project context note
     const contextNote = projectContext
       ? `\n\nContexto do projeto do usuário:\n- Nicho: ${projectContext.nicho || "não informado"}\n- Público-alvo: ${projectContext.publico_alvo || "não informado"}\n- Objetivo: ${projectContext.objetivo || "não informado"}\n- Faturamento: ${projectContext.faturamento || "não informado"}\n- Produto: ${projectContext.product_description || "não informado"}`
       : "";
 
-    // Convert messages to Anthropic format (separate system from user/assistant)
+    const fullSystemPrompt = systemPrompt + contextNote + crossAgentContext;
+
+    // 4. Convert messages to Anthropic format
     const anthropicMessages = messages.map((m: { role: string; content: string }) => ({
       role: m.role === "user" ? "user" : "assistant",
       content: m.content,
     }));
 
+    // 5. Call Anthropic API with streaming
+    const model = "claude-sonnet-4-20250514";
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -124,7 +96,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model,
         max_tokens: 4096,
-        system: systemPrompt + contextNote,
+        system: fullSystemPrompt,
         messages: anthropicMessages,
         stream: true,
       }),
@@ -145,7 +117,7 @@ serve(async (req) => {
       });
     }
 
-    // Transform Anthropic SSE stream to OpenAI-compatible SSE format
+    // 6. Transform Anthropic SSE stream to OpenAI-compatible format
     const transformStream = new TransformStream({
       transform(chunk, controller) {
         const text = new TextDecoder().decode(chunk);
@@ -158,9 +130,7 @@ serve(async (req) => {
 
           try {
             const event = JSON.parse(jsonStr);
-
             if (event.type === "content_block_delta" && event.delta?.text) {
-              // Convert to OpenAI-compatible format
               const openAIChunk = {
                 choices: [{ delta: { content: event.delta.text } }],
               };
