@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveProject } from "@/contexts/ActiveProjectContext";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   LayoutDashboard, FolderKanban, Bot, FileText, BarChart3,
-  Settings, LogOut, Menu, X, Shield, Brain,
+  Settings, LogOut, Menu, X, Shield, Brain, FolderOpen,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -26,6 +28,7 @@ const DashboardLayout = () => {
   const [profile, setProfile] = useState<{ name: string; plan: string } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const { projects, activeProject, setActiveProjectId } = useActiveProject();
   useRealtimeNotifications(user?.id);
 
   useEffect(() => {
@@ -102,13 +105,37 @@ const DashboardLayout = () => {
       </aside>
 
       <main className="flex-1 min-h-screen">
-        <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-xl px-6 py-4 flex items-center justify-between">
+        <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-xl px-6 py-3 flex items-center gap-4">
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-muted-foreground">
             <Menu className="w-5 h-5" />
           </button>
-          <h2 className="font-display text-lg font-semibold">
+          <h2 className="font-display text-lg font-semibold hidden sm:block">
             Olá, {profile?.name || "Usuário"}! 👋
           </h2>
+          <div className="flex-1" />
+          {/* Project selector */}
+          {projects.length > 0 ? (
+            <Select value={activeProject?.id || ""} onValueChange={setActiveProjectId}>
+              <SelectTrigger className="w-52 h-9 text-xs bg-card/50 border-border">
+                <FolderOpen className="w-3.5 h-3.5 mr-1.5 text-muted-foreground shrink-0" />
+                <SelectValue placeholder="Selecionar projeto" />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id} className="text-xs">
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <button
+              onClick={() => navigate("/projects")}
+              className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed border-border hover:border-primary/30"
+            >
+              <FolderOpen className="w-3.5 h-3.5" /> Criar projeto
+            </button>
+          )}
           <span className="text-xs px-3 py-1 rounded-full bg-primary/10 text-primary font-medium capitalize">
             {profile?.plan || "starter"}
           </span>
