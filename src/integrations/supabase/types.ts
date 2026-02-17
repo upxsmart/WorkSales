@@ -14,7 +14,148 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      agent_outputs: {
+        Row: {
+          agent_name: string
+          created_at: string
+          id: string
+          output_data: Json
+          project_id: string
+          version: number
+        }
+        Insert: {
+          agent_name: string
+          created_at?: string
+          id?: string
+          output_data?: Json
+          project_id: string
+          version?: number
+        }
+        Update: {
+          agent_name?: string
+          created_at?: string
+          id?: string
+          output_data?: Json
+          project_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_outputs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agent_tasks: {
+        Row: {
+          agent_name: string
+          completed_at: string | null
+          created_at: string
+          id: string
+          project_id: string
+          status: string
+        }
+        Insert: {
+          agent_name: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          project_id: string
+          status?: string
+        }
+        Update: {
+          agent_name?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          project_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          onboarding_completed: boolean
+          plan: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          onboarding_completed?: boolean
+          plan?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          onboarding_completed?: boolean
+          plan?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: {
+          created_at: string
+          faturamento: string | null
+          has_product: boolean | null
+          id: string
+          name: string
+          nicho: string | null
+          objetivo: string | null
+          product_description: string | null
+          publico_alvo: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          faturamento?: string | null
+          has_product?: boolean | null
+          id?: string
+          name?: string
+          nicho?: string | null
+          objetivo?: string | null
+          product_description?: string | null
+          publico_alvo?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          faturamento?: string | null
+          has_product?: boolean | null
+          id?: string
+          name?: string
+          nicho?: string | null
+          objetivo?: string | null
+          product_description?: string | null
+          publico_alvo?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

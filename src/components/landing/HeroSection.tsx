@@ -1,8 +1,10 @@
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const HeroSection = () => {
+  const navigate = useNavigate();
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden px-4">
       {/* Background effects */}
@@ -47,7 +49,7 @@ const HeroSection = () => {
           transition={{ duration: 0.7, delay: 0.3 }}
           className="flex flex-col sm:flex-row items-center justify-center gap-4"
         >
-          <Button size="lg" className="gradient-primary text-primary-foreground px-8 py-6 text-lg glow-primary">
+          <Button size="lg" className="gradient-primary text-primary-foreground px-8 py-6 text-lg glow-primary" onClick={() => navigate("/auth")}>
             Começar Agora
             <ArrowRight className="ml-2 w-5 h-5" />
           </Button>
