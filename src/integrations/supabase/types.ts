@@ -84,6 +84,41 @@ export type Database = {
           },
         ]
       }
+      chat_messages: {
+        Row: {
+          agent_name: string
+          content: string
+          created_at: string
+          id: string
+          project_id: string
+          role: string
+        }
+        Insert: {
+          agent_name: string
+          content: string
+          created_at?: string
+          id?: string
+          project_id: string
+          role: string
+        }
+        Update: {
+          agent_name?: string
+          content?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
