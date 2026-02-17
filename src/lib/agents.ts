@@ -1,0 +1,95 @@
+export const AGENTS_CONFIG = {
+  "AA-D100": {
+    code: "AA-D100",
+    name: "Análise de Audiência",
+    fullName: "Análise de Audiência e Dream 100",
+    description: "Gera micro-personas, lista Dream 100, mapa de dores × desejos",
+    color: "from-blue-500 to-indigo-600",
+    suggestions: [
+      "Crie 3 micro-personas para o meu nicho",
+      "Monte minha lista Dream 100",
+      "Mapeie as dores e desejos do meu público",
+      "Identifique padrões comportamentais da minha audiência",
+    ],
+  },
+  "AO-GO": {
+    code: "AO-GO",
+    name: "Otimização de Ofertas",
+    fullName: "Otimização de Ofertas Grand Slam",
+    description: "Cria Escada de Valor com 5 degraus, equação de valor, variações de copy",
+    color: "from-emerald-500 to-teal-600",
+    suggestions: [
+      "Crie minha Escada de Valor com 5 degraus",
+      "Calcule a equação de valor da minha oferta",
+      "Gere 3 variações de copy para meu produto",
+      "Defina a estratégia de pricing",
+    ],
+  },
+  "AJ-AF": {
+    code: "AJ-AF",
+    name: "Jornada e Funil",
+    fullName: "Jornada e Automação de Funil",
+    description: "Mapeia jornada do lead, gatilhos, sequências de email, lead scoring",
+    color: "from-orange-500 to-amber-600",
+    suggestions: [
+      "Mapeie a jornada completa do meu lead",
+      "Crie uma sequência de email nurturing",
+      "Configure meu lead scoring",
+      "Desenhe meu funil de vendas completo",
+    ],
+  },
+  "AE-C": {
+    code: "AE-C",
+    name: "Engajamento",
+    fullName: "Engajamento Conversacional",
+    description: "Scripts de Epiphany Bridge, fluxos de conversa, qualificação BANT",
+    color: "from-pink-500 to-rose-600",
+    suggestions: [
+      "Crie um script de Epiphany Bridge",
+      "Desenvolva um fluxo de conversa para vendas",
+      "Monte a qualificação BANT do meu cliente",
+      "Gere scripts para minha próxima live",
+    ],
+  },
+  "AM-CC": {
+    code: "AM-CC",
+    name: "Marketing e Conteúdo",
+    fullName: "Marketing e Conteúdo Criativo",
+    description: "Páginas de vendas, sequências de email, hooks, scripts de vídeo",
+    color: "from-violet-500 to-purple-600",
+    suggestions: [
+      "Crie uma página de vendas completa",
+      "Gere 10 hooks virais para Instagram",
+      "Escreva um script de VSL",
+      "Crie uma sequência de email de lançamento",
+    ],
+  },
+  "AC-DC": {
+    code: "AC-DC",
+    name: "Design e Criativos",
+    fullName: "Design e Criativos",
+    description: "Briefings visuais, prompts de geração de imagem, specs por plataforma",
+    color: "from-cyan-500 to-blue-600",
+    suggestions: [
+      "Crie um briefing visual para minha marca",
+      "Gere prompts de imagem para meus criativos",
+      "Defina specs de design por plataforma",
+      "Sugira uma paleta de cores para meu nicho",
+    ],
+  },
+  "ACO": {
+    code: "ACO",
+    name: "Orquestrador Central",
+    fullName: "Orquestrador Central",
+    description: "Diagnóstico de coerência, identificação de gaps, plano de ação priorizado",
+    color: "from-accent to-yellow-600",
+    suggestions: [
+      "Faça um diagnóstico completo da minha estratégia",
+      "Identifique gaps na minha estrutura",
+      "Crie um plano de ação priorizado",
+      "Qual a ordem ideal para usar os agentes?",
+    ],
+  },
+} as const;
+
+export type AgentCode = keyof typeof AGENTS_CONFIG;

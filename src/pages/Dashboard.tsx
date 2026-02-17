@@ -137,6 +137,7 @@ const Dashboard = () => {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
                   className="glass glass-hover rounded-xl p-5 flex flex-col cursor-pointer group"
+                  onClick={() => navigate(`/agent/${agent.code}`)}
                 >
                   <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${agent.color} flex items-center justify-center mb-3`}>
                     <agent.icon className="w-5 h-5 text-white" />
