@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard, Bot, CreditCard, DollarSign,
-  LogOut, ChevronLeft, Menu, X, Shield, Users, Settings,
+  LogOut, ChevronLeft, Menu, X, Shield, Users, Settings, BookOpen,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin" },
   { label: "Financeiro", icon: DollarSign, path: "/admin/financial" },
   { label: "Agentes de IA", icon: Bot, path: "/admin/agents" },
+  { label: "Prompts / Knowledge", icon: BookOpen, path: "/admin/knowledge", indent: true },
   { label: "Usuários", icon: Users, path: "/admin/users" },
   { label: "Assinaturas", icon: CreditCard, path: "/admin/subscriptions" },
   { label: "Configurações", icon: Settings, path: "/admin/settings" },
@@ -53,6 +54,7 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
         <nav className="flex-1 px-3 space-y-1">
           {NAV_ITEMS.map((item) => {
             const isActive = location.pathname === item.path;
+            const indent = (item as any).indent;
             return (
               <button
                 key={item.label}
@@ -60,13 +62,15 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
                   navigate(item.path);
                   setSidebarOpen(false);
                 }}
-                className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                className={`flex items-center gap-3 w-full py-2.5 rounded-lg text-sm transition-colors ${
+                  indent ? "pl-9 pr-3" : "px-3"
+                } ${
                   isActive
                     ? "bg-primary/10 text-primary font-medium"
                     : "text-sidebar-foreground hover:bg-sidebar-accent"
                 }`}
               >
-                <item.icon className={`w-4 h-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                <item.icon className={`w-4 h-4 ${isActive ? "text-primary" : "text-muted-foreground"} ${indent ? "w-3.5 h-3.5" : ""}`} />
                 {item.label}
               </button>
             );
