@@ -11,6 +11,8 @@ import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
 import AgentChat from "./pages/AgentChat";
+import Orchestrator from "./pages/Orchestrator";
+import Metrics from "./pages/Metrics";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,10 +45,26 @@ const App = () => (
               }
             />
             <Route
+              path="/agent/ACO"
+              element={
+                <ProtectedRoute>
+                  <Orchestrator />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/agent/:agentCode"
               element={
                 <ProtectedRoute>
                   <AgentChat />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/metrics"
+              element={
+                <ProtectedRoute>
+                  <Metrics />
                 </ProtectedRoute>
               }
             />

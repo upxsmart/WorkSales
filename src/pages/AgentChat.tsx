@@ -12,7 +12,7 @@ import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import {
   ArrowLeft, Send, Loader2, Trash2, User, Bot,
-  Check, RefreshCw, Download, Share2, Clock,
+  Check, RefreshCw, Download, Share2, Clock, RotateCcw,
 } from "lucide-react";
 
 type AgentOutput = {
@@ -209,6 +209,31 @@ const AgentChat = () => {
     a.click();
     URL.revokeObjectURL(url);
   }, [agentCode]);
+
+  const handleRevert = useCallback(async (output: AgentOutput) => {
+    const content = typeof output.output_data === "object" && output.output_data !== null && "content" in (output.output_data as Record<string, unknown>)
+      ? String((output.output_data as Record<string, unknown>).content)
+      : JSON.stringify(output.output_data);
+    // Create a new version based on this old one
+    if (!projectId || !agentCode) return;
+    const newVersion = outputs.length + 1;
+    const { error } = await supabase.from("agent_outputs").insert({
+      project_id: projectId,
+      agent_name: agentCode,
+      output_type: output.output_type,
+      title: `${output.title} (revertido)`,
+      output_data: { content },
+      is_approved: true,
+      version: newVersion,
+    });
+    if (error) {
+      toast({ title: "Erro", description: "Não foi possível reverter.", variant: "destructive" });
+    } else {
+      toast({ title: "Revertido! ↩️", description: `Versão ${output.version} restaurada como v${newVersion}.` });
+      const { data } = await supabase.from("agent_outputs").select("*").eq("project_id", projectId).eq("agent_name", agentCode).order("created_at", { ascending: false });
+      if (data) setOutputs(data as AgentOutput[]);
+    }
+  }, [projectId, agentCode, outputs.length, toast]);
 
   if (!agent) {
     return (
@@ -417,12 +442,20 @@ const AgentChat = () => {
                         <div>
                           <span className="text-xs font-medium">{out.title || out.output_type}</span>
                           <span className="text-xs text-muted-foreground ml-2">v{out.version}</span>
-                        </div>
-                        {out.is_approved && (
-                          <span className="text-xs text-green-400 flex items-center gap-1">
-                            <Check className="w-3 h-3" /> Aprovado
+                          <span className="text-xs text-muted-foreground ml-2">
+                            {new Date(out.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                           </span>
-                        )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {out.is_approved && (
+                            <span className="text-xs text-green-400 flex items-center gap-1">
+                              <Check className="w-3 h-3" /> Aprovado
+                            </span>
+                          )}
+                          <Button size="sm" variant="ghost" className="text-xs h-6 px-2" onClick={() => handleRevert(out)} title="Reverter para esta versão">
+                            <RotateCcw className="w-3 h-3" />
+                          </Button>
+                        </div>
                       </div>
                       <div className="prose prose-sm prose-invert max-w-none text-xs [&_p]:text-muted-foreground [&_li]:text-muted-foreground line-clamp-6">
                         <ReactMarkdown>
