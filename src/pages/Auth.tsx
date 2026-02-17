@@ -39,7 +39,7 @@ const Auth = () => {
         });
         if (error) throw error;
         if (data.session) {
-          navigate("/onboarding");
+          navigate("/dashboard");
         } else {
           toast({ title: "Conta criada!", description: "Verifique seu email para confirmar." });
         }
