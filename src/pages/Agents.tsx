@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useActiveProject } from "@/contexts/ActiveProjectContext";
 import { AGENTS_CONFIG, AgentCode } from "@/lib/agents";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,41 +34,27 @@ interface AgentStats {
 }
 
 const Agents = () => {
-  const { user } = useAuth();
+  const { activeProject } = useActiveProject();
   const navigate = useNavigate();
-  const [projectId, setProjectId] = useState<string | null>(null);
   const [stats, setStats] = useState<Record<string, AgentStats>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!activeProject) {
+      setLoading(false);
+      return;
+    }
 
     const load = async () => {
-      // Get first project
-      const { data: proj } = await supabase
-        .from("projects")
-        .select("id")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (!proj) {
-        setLoading(false);
-        return;
-      }
-      setProjectId(proj.id);
-
-      // Load outputs and messages counts per agent
       const [{ data: outputs }, { data: messages }] = await Promise.all([
         supabase
           .from("agent_outputs")
           .select("agent_name, is_approved")
-          .eq("project_id", proj.id),
+          .eq("project_id", activeProject.id),
         supabase
           .from("chat_messages")
           .select("agent_name")
-          .eq("project_id", proj.id),
+          .eq("project_id", activeProject.id),
       ]);
 
       const s: Record<string, AgentStats> = {};
@@ -86,7 +72,7 @@ const Agents = () => {
     };
 
     load();
-  }, [user]);
+  }, [activeProject]);
 
   const getAgentStatus = (code: string): "completed" | "in_progress" | "pending" => {
     const s = stats[code];

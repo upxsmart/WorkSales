@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveProject } from "@/contexts/ActiveProjectContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,6 +43,7 @@ const FATURAMENTO_OPTIONS = [
 const Projects = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { refresh: refreshActiveProject } = useActiveProject();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -66,6 +68,7 @@ const Projects = () => {
       .order("created_at", { ascending: false });
     setProjects(data || []);
     setLoading(false);
+    refreshActiveProject();
   };
 
   useEffect(() => {

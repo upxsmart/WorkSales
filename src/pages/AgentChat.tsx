@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveProject } from "@/contexts/ActiveProjectContext";
 import { useAgentChat } from "@/hooks/useAgentChat";
 import { AGENTS_CONFIG, AgentCode } from "@/lib/agents";
 import { Button } from "@/components/ui/button";
@@ -33,8 +34,9 @@ const AgentChat = () => {
   const { messages, isLoading, sendMessage, clearMessages, setMessages } = useAgentChat();
   const { toast } = useToast();
   const [input, setInput] = useState("");
-  const [project, setProject] = useState<Record<string, unknown> | null>(null);
-  const [projectId, setProjectId] = useState<string | null>(null);
+  const { activeProject } = useActiveProject();
+  const project = activeProject as unknown as Record<string, unknown> | null;
+  const projectId = activeProject?.id || null;
   const [outputs, setOutputs] = useState<AgentOutput[]>([]);
   const [allOutputs, setAllOutputs] = useState<AgentOutput[]>([]);
   const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
@@ -44,24 +46,6 @@ const AgentChat = () => {
     ? AGENTS_CONFIG[agentCode as AgentCode]
     : null;
   const AgentIcon = agent?.icon || Bot;
-
-  // Load project
-  useEffect(() => {
-    if (!user) return;
-    supabase
-      .from("projects")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setProject(data as Record<string, unknown>);
-          setProjectId(data.id);
-        }
-      });
-  }, [user]);
 
   // Load chat history + outputs when project loads
   useEffect(() => {
