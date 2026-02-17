@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, FolderKanban, Bot, FileText, BarChart3,
-  Settings, LogOut, ChevronRight, Menu, X,
+  Settings, LogOut, ChevronRight, Menu, X, Shield,
 } from "lucide-react";
 import { AGENTS_CONFIG, AgentCode } from "@/lib/agents";
 
@@ -27,6 +27,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<{ name: string; plan: string } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -38,6 +39,9 @@ const Dashboard = () => {
       .then(({ data }) => {
         if (data) setProfile(data);
       });
+    supabase.rpc("has_role", { _user_id: user.id, _role: "admin" }).then(({ data }) => {
+      setIsAdmin(!!data);
+    });
   }, [user]);
 
   const handleSignOut = async () => {
@@ -78,7 +82,16 @@ const Dashboard = () => {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-sidebar-border">
+        <div className="p-4 border-t border-sidebar-border space-y-1">
+          {isAdmin && (
+            <button
+              onClick={() => navigate("/admin")}
+              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-accent hover:bg-sidebar-accent transition-colors"
+            >
+              <Shield className="w-4 h-4" />
+              Painel Admin
+            </button>
+          )}
           <button
             onClick={handleSignOut}
             className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-destructive transition-colors"

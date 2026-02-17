@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import AdminRoute from "@/components/AdminRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
@@ -13,6 +14,11 @@ import Dashboard from "./pages/Dashboard";
 import AgentChat from "./pages/AgentChat";
 import Orchestrator from "./pages/Orchestrator";
 import Metrics from "./pages/Metrics";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminAgents from "./pages/admin/AdminAgents";
+import AdminKnowledge from "./pages/admin/AdminKnowledge";
+import AdminSubscriptions from "./pages/admin/AdminSubscriptions";
+import AdminFinancial from "./pages/admin/AdminFinancial";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -68,6 +74,11 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+            <Route path="/admin/agents" element={<AdminRoute><AdminAgents /></AdminRoute>} />
+            <Route path="/admin/knowledge" element={<AdminRoute><AdminKnowledge /></AdminRoute>} />
+            <Route path="/admin/subscriptions" element={<AdminRoute><AdminSubscriptions /></AdminRoute>} />
+            <Route path="/admin/financial" element={<AdminRoute><AdminFinancial /></AdminRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

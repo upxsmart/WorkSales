@@ -44,7 +44,23 @@ serve(async (req) => {
 
     const systemPrompt = promptRow?.system_prompt || "Você é um assistente de IA útil. Responda em português brasileiro.";
 
-    // 2. Fetch approved outputs from dependency agents
+    // 2. Fetch knowledge base for this agent
+    let knowledgeContext = "";
+    const { data: kbItems } = await supabase
+      .from("knowledge_base")
+      .select("title, content, category")
+      .eq("agent_code", agentName)
+      .eq("is_active", true);
+
+    if (kbItems && kbItems.length > 0) {
+      knowledgeContext = "\n\n--- BASE DE CONHECIMENTO ---\n";
+      for (const item of kbItems) {
+        knowledgeContext += `\n### [${item.category}] ${item.title}\n${item.content}\n`;
+      }
+      knowledgeContext += "\n--- FIM DA BASE ---\n";
+    }
+
+    // 3. Fetch approved outputs from dependency agents
     let crossAgentContext = "";
     if (projectId) {
       const deps = AGENT_DEPENDENCIES[agentName] || [];
@@ -71,12 +87,12 @@ serve(async (req) => {
       }
     }
 
-    // 3. Build project context note
+    // 4. Build project context note
     const contextNote = projectContext
       ? `\n\nContexto do projeto do usuário:\n- Nicho: ${projectContext.nicho || "não informado"}\n- Público-alvo: ${projectContext.publico_alvo || "não informado"}\n- Objetivo: ${projectContext.objetivo || "não informado"}\n- Faturamento: ${projectContext.faturamento || "não informado"}\n- Produto: ${projectContext.product_description || "não informado"}`
       : "";
 
-    const fullSystemPrompt = systemPrompt + contextNote + crossAgentContext;
+    const fullSystemPrompt = systemPrompt + knowledgeContext + contextNote + crossAgentContext;
 
     // 4. Convert messages to Anthropic format
     const anthropicMessages = messages.map((m: { role: string; content: string }) => ({
