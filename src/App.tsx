@@ -37,7 +37,7 @@ const App = () => (
             <Route
               path="/onboarding"
               element={
-                <ProtectedRoute requireOnboarding={false}>
+                <ProtectedRoute>
                   <Onboarding />
                 </ProtectedRoute>
               }
