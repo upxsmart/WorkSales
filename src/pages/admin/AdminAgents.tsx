@@ -1,197 +1,126 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/admin/AdminLayout";
-import { AGENTS_CONFIG } from "@/lib/agents";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
-import { Save, Plus, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
-import { toast } from "sonner";
-
-interface Prompt {
-  id: string;
-  agent_code: string;
-  system_prompt: string;
-  version: number;
-  is_active: boolean;
-  created_at: string;
-}
-
-const AGENTS = Object.values(AGENTS_CONFIG);
+import { Bot, Cpu, Zap, DollarSign } from "lucide-react";
+import { AGENTS, MODEL_COSTS, OPTIMIZATIONS } from "@/lib/adminMockData";
+import { Badge } from "@/components/ui/badge";
 
 const AdminAgents = () => {
-  const [selectedAgent, setSelectedAgent] = useState(AGENTS[0].code);
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
-  const [newPrompt, setNewPrompt] = useState("");
-  const [loading, setLoading] = useState(false);
+  const totalCalls = AGENTS.reduce((a, b) => a + b.calls, 0);
+  const totalCost = AGENTS.reduce((a, b) => a + b.monthlyCost, 0);
+  const totalTokens = AGENTS.reduce((a, b) => a + b.tokens, 0);
+  const totalEconomy = OPTIMIZATIONS.reduce((a, b) => a + b.economy, 0);
 
-  const fetchPrompts = async () => {
-    const { data } = await supabase
-      .from("agent_prompts")
-      .select("*")
-      .eq("agent_code", selectedAgent)
-      .order("version", { ascending: false });
-    setPrompts(data || []);
-  };
-
-  useEffect(() => {
-    fetchPrompts();
-  }, [selectedAgent]);
-
-  const handleSavePrompt = async () => {
-    if (!newPrompt.trim()) return;
-    setLoading(true);
-    const maxVersion = prompts.length > 0 ? Math.max(...prompts.map((p) => p.version)) : 0;
-
-    // Deactivate all current prompts
-    if (prompts.length > 0) {
-      await supabase
-        .from("agent_prompts")
-        .update({ is_active: false })
-        .eq("agent_code", selectedAgent);
-    }
-
-    const { error } = await supabase.from("agent_prompts").insert({
-      agent_code: selectedAgent,
-      system_prompt: newPrompt,
-      version: maxVersion + 1,
-      is_active: true,
-    });
-
-    if (error) {
-      toast.error("Erro ao salvar prompt");
-    } else {
-      toast.success("Prompt salvo com sucesso!");
-      setNewPrompt("");
-      fetchPrompts();
-    }
-    setLoading(false);
-  };
-
-  const toggleActive = async (prompt: Prompt) => {
-    // Deactivate all, then activate this one
-    await supabase
-      .from("agent_prompts")
-      .update({ is_active: false })
-      .eq("agent_code", selectedAgent);
-
-    if (!prompt.is_active) {
-      await supabase
-        .from("agent_prompts")
-        .update({ is_active: true })
-        .eq("id", prompt.id);
-    }
-
-    fetchPrompts();
-    toast.success("Status do prompt atualizado");
-  };
-
-  const deletePrompt = async (id: string) => {
-    await supabase.from("agent_prompts").delete().eq("id", id);
-    fetchPrompts();
-    toast.success("Prompt removido");
-  };
-
-  const agentConfig = AGENTS_CONFIG[selectedAgent as keyof typeof AGENTS_CONFIG];
+  const kpis = [
+    { label: "Total Chamadas/Mês", value: totalCalls.toLocaleString("pt-BR"), icon: Bot },
+    { label: "Custo Total API/Mês", value: `$${totalCost.toFixed(2)}`, icon: DollarSign },
+    { label: "Tokens Processados", value: `${(totalTokens / 1e6).toFixed(1)}M`, icon: Cpu },
+  ];
 
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <h1 className="font-display text-2xl font-bold">Gestão de Agentes & Prompts</h1>
+        <h1 className="font-display text-2xl font-bold">Agentes de IA</h1>
 
-        {/* Agent selector */}
-        <div className="flex flex-wrap gap-2">
-          {AGENTS.map((agent) => {
-            const IconComp = agent.icon;
-            const isActive = selectedAgent === agent.code;
-            return (
-              <button
-                key={agent.code}
-                onClick={() => setSelectedAgent(agent.code)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                  isActive
-                    ? "bg-primary/10 text-primary border border-primary/30"
-                    : "glass glass-hover"
-                }`}
-              >
-                <IconComp className="w-4 h-4" />
-                {agent.code}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Agent info */}
-        <div className="glass rounded-xl p-5">
-          <div className="flex items-center gap-3 mb-2">
-            <agentConfig.icon className="w-5 h-5 text-primary" />
-            <h3 className="font-display font-semibold">{agentConfig.fullName}</h3>
-          </div>
-          <p className="text-sm text-muted-foreground">{agentConfig.description}</p>
-        </div>
-
-        {/* New prompt */}
-        <div className="glass rounded-xl p-5 space-y-4">
-          <h3 className="font-display font-semibold">Novo Prompt do Sistema</h3>
-          <Textarea
-            value={newPrompt}
-            onChange={(e) => setNewPrompt(e.target.value)}
-            placeholder="Digite o system prompt para este agente..."
-            className="min-h-[200px] bg-secondary/50 border-border"
-          />
-          <Button onClick={handleSavePrompt} disabled={loading || !newPrompt.trim()}>
-            <Save className="w-4 h-4 mr-2" />
-            Salvar como nova versão
-          </Button>
-        </div>
-
-        {/* Prompt history */}
-        <div className="space-y-3">
-          <h3 className="font-display font-semibold">Histórico de Prompts</h3>
-          {prompts.length === 0 && (
-            <p className="text-sm text-muted-foreground">Nenhum prompt configurado para este agente.</p>
-          )}
-          {prompts.map((prompt) => (
-            <motion.div
-              key={prompt.id}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className={`glass rounded-xl p-4 ${prompt.is_active ? "border-primary/50" : ""}`}
-            >
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {kpis.map((kpi, i) => (
+            <motion.div key={kpi.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="glass rounded-xl p-5">
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-mono text-muted-foreground">v{prompt.version}</span>
-                  {prompt.is_active && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                      ATIVO
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="ghost" onClick={() => toggleActive(prompt)}>
-                    {prompt.is_active ? (
-                      <ToggleRight className="w-4 h-4 text-primary" />
-                    ) : (
-                      <ToggleLeft className="w-4 h-4" />
-                    )}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => deletePrompt(prompt.id)}>
-                    <Trash2 className="w-4 h-4 text-destructive" />
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setNewPrompt(prompt.system_prompt)}>
-                    Copiar
-                  </Button>
-                </div>
+                <span className="text-sm text-muted-foreground">{kpi.label}</span>
+                <kpi.icon className="w-4 h-4 text-muted-foreground" />
               </div>
-              <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-h-32 overflow-y-auto">
-                {prompt.system_prompt}
-              </pre>
-              <p className="text-xs text-muted-foreground mt-2">
-                {new Date(prompt.created_at).toLocaleDateString("pt-BR")}
-              </p>
+              <p className="font-display text-2xl font-bold">{kpi.value}</p>
             </motion.div>
           ))}
+        </div>
+
+        {/* Agent Table */}
+        <div className="glass rounded-xl overflow-hidden">
+          <div className="p-5 border-b border-border/50">
+            <h3 className="font-display font-semibold">Performance por Agente</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/50 text-muted-foreground">
+                  <th className="text-left px-5 py-3 font-medium">Agente</th>
+                  <th className="text-left px-3 py-3 font-medium">Modelo IA</th>
+                  <th className="text-right px-3 py-3 font-medium">Chamadas</th>
+                  <th className="text-right px-3 py-3 font-medium">Tokens</th>
+                  <th className="text-right px-3 py-3 font-medium">Custo/Mês</th>
+                  <th className="text-right px-3 py-3 font-medium">Média</th>
+                  <th className="px-5 py-3 font-medium">% Custo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {AGENTS.map((a) => (
+                  <tr key={a.code} className="border-b border-border/20 hover:bg-secondary/30 transition-colors">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="font-mono text-xs">{a.code}</Badge>
+                        <span className="font-medium">{a.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-muted-foreground text-xs">{a.model}</td>
+                    <td className="px-3 py-3 text-right">{a.calls.toLocaleString("pt-BR")}</td>
+                    <td className="px-3 py-3 text-right text-muted-foreground">{(a.tokens / 1e6).toFixed(1)}M</td>
+                    <td className="px-3 py-3 text-right font-medium">${a.monthlyCost.toFixed(2)}</td>
+                    <td className="px-3 py-3 text-right text-muted-foreground">${a.avgCost.toFixed(3)}</td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 bg-secondary rounded-full h-1.5">
+                          <div className="h-1.5 rounded-full bg-primary" style={{ width: `${(a.monthlyCost / totalCost * 100)}%` }} />
+                        </div>
+                        <span className="text-xs text-muted-foreground">{(a.monthlyCost / totalCost * 100).toFixed(0)}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Cost by Model */}
+          <div className="glass rounded-xl p-5">
+            <h3 className="font-display font-semibold mb-4">Custo por Modelo de IA</h3>
+            <div className="space-y-4">
+              {MODEL_COSTS.map((m) => (
+                <div key={m.name}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>{m.name}</span>
+                    <span className="text-muted-foreground">{m.pct}%</span>
+                  </div>
+                  <div className="w-full bg-secondary rounded-full h-2">
+                    <div className="h-2 rounded-full" style={{ width: `${m.pct}%`, background: m.color }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Optimizations */}
+          <div className="space-y-4">
+            <h3 className="font-display font-semibold">Otimizações Ativas</h3>
+            {OPTIMIZATIONS.map((o) => (
+              <div key={o.name} className="glass rounded-xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Zap className="w-4 h-4 text-accent" />
+                  <div>
+                    <p className="text-sm font-medium">{o.name}</p>
+                    <p className="text-xs text-muted-foreground">{o.detail}</p>
+                  </div>
+                </div>
+                <span className="text-sm font-medium text-emerald-400">-R${o.economy.toLocaleString("pt-BR")}/mês</span>
+              </div>
+            ))}
+            <div className="glass rounded-xl p-4 border-l-4 border-emerald-400">
+              <div className="flex justify-between items-center">
+                <span className="font-medium">Total Economia</span>
+                <span className="font-display text-xl font-bold text-emerald-400">R${totalEconomy.toLocaleString("pt-BR")}/mês</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </AdminLayout>

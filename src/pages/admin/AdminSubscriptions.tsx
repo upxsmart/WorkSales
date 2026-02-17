@@ -1,129 +1,88 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import AdminLayout from "@/components/admin/AdminLayout";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
-import { Search, UserCircle, ArrowUpDown } from "lucide-react";
-import { toast } from "sonner";
+import { Check, Edit2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { PLAN_FEATURES, MOVEMENT_HISTORY } from "@/lib/adminMockData";
 
-interface UserProfile {
-  id: string;
-  user_id: string;
-  name: string;
-  plan: string;
-  onboarding_completed: boolean;
-  created_at: string;
-}
-
-const PLANS = ["starter", "professional", "scale"];
+const planUserCounts: Record<string, number> = { starter: 45, professional: 38, scale: 12 };
 
 const AdminSubscriptions = () => {
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "plan" | "created_at">("created_at");
-
-  const fetchUsers = async () => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .order("created_at", { ascending: false });
-    setUsers(data || []);
-  };
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  const handlePlanChange = async (userId: string, newPlan: string) => {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ plan: newPlan })
-      .eq("user_id", userId);
-    if (error) {
-      toast.error("Erro ao atualizar plano");
-    } else {
-      toast.success("Plano atualizado!");
-      fetchUsers();
-    }
-  };
-
-  const filtered = users
-    .filter((u) => u.name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => {
-      if (sortBy === "name") return a.name.localeCompare(b.name);
-      if (sortBy === "plan") return a.plan.localeCompare(b.plan);
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
-
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <h1 className="font-display text-2xl font-bold">Gestão de Assinaturas</h1>
+        <h1 className="font-display text-2xl font-bold">Assinaturas & Planos</h1>
 
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar usuário..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 bg-secondary/50"
-            />
-          </div>
-          <div className="flex gap-2">
-            {(["created_at", "name", "plan"] as const).map((s) => (
-              <Button
-                key={s}
-                size="sm"
-                variant={sortBy === s ? "default" : "outline"}
-                onClick={() => setSortBy(s)}
-              >
-                <ArrowUpDown className="w-3 h-3 mr-1" />
-                {s === "created_at" ? "Data" : s === "name" ? "Nome" : "Plano"}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          {filtered.map((user) => (
-            <motion.div
-              key={user.id}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="glass rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+        {/* Plan Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {Object.entries(PLAN_FEATURES).map(([key, plan], i) => (
+            <motion.div key={key} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
+              className="glass rounded-xl overflow-hidden"
             >
-              <div className="flex items-center gap-3">
-                <UserCircle className="w-8 h-8 text-muted-foreground shrink-0" />
-                <div>
-                  <p className="font-medium text-sm">{user.name || "Sem nome"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Desde {new Date(user.created_at).toLocaleDateString("pt-BR")} •{" "}
-                    {user.onboarding_completed ? "Onboarding OK" : "Onboarding pendente"}
-                  </p>
+              <div className="h-1.5" style={{ background: plan.color }} />
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-display font-bold text-lg">{plan.name}</h3>
+                  <Badge variant="outline">{planUserCounts[key]} users</Badge>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {PLANS.map((plan) => (
-                  <button
-                    key={plan}
-                    onClick={() => handlePlanChange(user.user_id, plan)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors ${
-                      user.plan === plan
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-secondary/50 text-muted-foreground hover:bg-secondary"
-                    }`}
-                  >
-                    {plan}
-                  </button>
-                ))}
+                <p className="font-display text-3xl font-bold mb-5">
+                  R${plan.price}<span className="text-sm font-normal text-muted-foreground">/mês</span>
+                </p>
+                <ul className="space-y-2.5 mb-6">
+                  {plan.features.map((f) => (
+                    <li key={f} className="flex items-start gap-2 text-sm">
+                      <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: plan.color }} />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Button variant="outline" className="w-full gap-2">
+                  <Edit2 className="w-4 h-4" /> Editar Plano
+                </Button>
               </div>
             </motion.div>
           ))}
-          {filtered.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-8">Nenhum usuário encontrado.</p>
-          )}
+        </div>
+
+        {/* Movement History */}
+        <div className="glass rounded-xl overflow-hidden">
+          <div className="p-5 border-b border-border/50">
+            <h3 className="font-display font-semibold">Histórico de Movimentações</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/50 text-muted-foreground">
+                  <th className="text-left px-5 py-3 font-medium">Data</th>
+                  <th className="text-left px-3 py-3 font-medium">Usuário</th>
+                  <th className="text-left px-3 py-3 font-medium">Tipo</th>
+                  <th className="text-center px-3 py-3 font-medium">De → Para</th>
+                  <th className="text-right px-5 py-3 font-medium">Impacto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {MOVEMENT_HISTORY.map((m, i) => (
+                  <motion.tr key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
+                    className="border-b border-border/20 hover:bg-secondary/30 transition-colors"
+                  >
+                    <td className="px-5 py-3 text-muted-foreground">{m.date}</td>
+                    <td className="px-3 py-3 font-medium">{m.user}</td>
+                    <td className="px-3 py-3">
+                      <Badge variant="outline" className={
+                        m.type === "Churn" ? "border-destructive/30 text-destructive" :
+                        m.type === "Upgrade" ? "border-primary/30 text-primary" :
+                        "border-emerald-500/30 text-emerald-400"
+                      }>{m.type}</Badge>
+                    </td>
+                    <td className="px-3 py-3 text-center text-muted-foreground">{m.from} → {m.to}</td>
+                    <td className={`px-5 py-3 text-right font-medium ${m.impact > 0 ? "text-emerald-400" : "text-destructive"}`}>
+                      {m.impact > 0 ? "+" : ""}R${Math.abs(m.impact)}
+                    </td>
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </AdminLayout>
