@@ -1,17 +1,18 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  LayoutDashboard, Bot, BookOpen, CreditCard, DollarSign,
-  LogOut, ChevronLeft, Menu, X, Shield,
+  LayoutDashboard, Bot, CreditCard, DollarSign,
+  LogOut, ChevronLeft, Menu, X, Shield, Users, Settings,
 } from "lucide-react";
 import { useState } from "react";
 
 const NAV_ITEMS = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/admin" },
-  { label: "Agentes & Prompts", icon: Bot, path: "/admin/agents" },
-  { label: "Base de Conhecimento", icon: BookOpen, path: "/admin/knowledge" },
-  { label: "Assinaturas", icon: CreditCard, path: "/admin/subscriptions" },
   { label: "Financeiro", icon: DollarSign, path: "/admin/financial" },
+  { label: "Agentes de IA", icon: Bot, path: "/admin/agents" },
+  { label: "Usuários", icon: Users, path: "/admin/users" },
+  { label: "Assinaturas", icon: CreditCard, path: "/admin/subscriptions" },
+  { label: "Configurações", icon: Settings, path: "/admin/settings" },
 ];
 
 const AdminLayout = ({ children }: { children: React.ReactNode }) => {

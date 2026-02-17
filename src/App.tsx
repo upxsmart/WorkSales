@@ -22,9 +22,10 @@ import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAgents from "./pages/admin/AdminAgents";
-import AdminKnowledge from "./pages/admin/AdminKnowledge";
+import AdminUsers from "./pages/admin/AdminUsers";
 import AdminSubscriptions from "./pages/admin/AdminSubscriptions";
 import AdminFinancial from "./pages/admin/AdminFinancial";
+import AdminSettings from "./pages/admin/AdminSettings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -75,10 +76,11 @@ const App = () => (
               }
             />
             <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
-            <Route path="/admin/agents" element={<AdminRoute><AdminAgents /></AdminRoute>} />
-            <Route path="/admin/knowledge" element={<AdminRoute><AdminKnowledge /></AdminRoute>} />
-            <Route path="/admin/subscriptions" element={<AdminRoute><AdminSubscriptions /></AdminRoute>} />
             <Route path="/admin/financial" element={<AdminRoute><AdminFinancial /></AdminRoute>} />
+            <Route path="/admin/agents" element={<AdminRoute><AdminAgents /></AdminRoute>} />
+            <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+            <Route path="/admin/subscriptions" element={<AdminRoute><AdminSubscriptions /></AdminRoute>} />
+            <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
