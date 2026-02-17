@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, FolderKanban, Bot, FileText, BarChart3,
-  Settings, LogOut, ChevronRight, Menu, X, Shield,
+  Settings, LogOut, ChevronRight, Menu, X, Shield, Brain,
 } from "lucide-react";
 import { AGENTS_CONFIG, AgentCode } from "@/lib/agents";
 
@@ -17,14 +17,16 @@ const NAV_ITEMS = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "Meus Projetos", icon: FolderKanban, path: "/projects" },
   { label: "Agentes", icon: Bot, path: "/agents" },
-  { label: "Documentos", icon: FileText, path: "/documents" },
+  { label: "Orquestrador", icon: Brain, path: "/agent/ACO" },
   { label: "Métricas", icon: BarChart3, path: "/metrics" },
+  { label: "Documentos", icon: FileText, path: "/documents" },
   { label: "Configurações", icon: Settings, path: "/settings" },
 ];
 
 const Dashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [profile, setProfile] = useState<{ name: string; plan: string } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -70,16 +72,23 @@ const Dashboard = () => {
         </div>
 
         <nav className="flex-1 px-3 space-y-1">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.label}
-              onClick={() => navigate(item.path)}
-              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
-            >
-              <item.icon className="w-4 h-4 text-muted-foreground" />
-              {item.label}
-            </button>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <button
+                key={item.label}
+                onClick={() => navigate(item.path)}
+                className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                  isActive
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent"
+                }`}
+              >
+                <item.icon className={`w-4 h-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                {item.label}
+              </button>
+            );
+          })}
         </nav>
 
         <div className="p-4 border-t border-sidebar-border space-y-1">
