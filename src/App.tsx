@@ -19,6 +19,7 @@ import Metrics from "./pages/Metrics";
 import Projects from "./pages/Projects";
 import Agents from "./pages/Agents";
 import Documents from "./pages/Documents";
+import Gallery from "./pages/Gallery";
 import Settings from "./pages/Settings";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminAgents from "./pages/admin/AdminAgents";
@@ -57,6 +58,7 @@ const App = () => (
               <Route path="/projects" element={<Projects />} />
               <Route path="/agents" element={<Agents />} />
               <Route path="/metrics" element={<Metrics />} />
+              <Route path="/gallery" element={<Gallery />} />
               <Route path="/documents" element={<Documents />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
