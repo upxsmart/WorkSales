@@ -32,7 +32,8 @@ type CreativeFormat = { id: string; label: string; ratio: string; dimensions: st
 
 const CREATIVE_FORMATS: CreativeFormat[] = [
   { id: "story", label: "Story", ratio: "9:16", dimensions: "1080×1920px" },
-  { id: "feed", label: "Feed", ratio: "1:1", dimensions: "1080×1080px" },
+  { id: "feed-square", label: "Feed", ratio: "1:1", dimensions: "1080×1080px" },
+  { id: "feed-portrait", label: "Feed Portrait", ratio: "4:5", dimensions: "1080×1350px" },
   { id: "banner", label: "Banner", ratio: "16:9", dimensions: "1200×628px" },
 ];
 
@@ -435,7 +436,10 @@ const AgentChat = () => {
                       >
                         {/* Tiny aspect ratio preview */}
                         <span className={`inline-block border border-current rounded-sm ${
-                          fmt.id === "story" ? "w-2 h-3.5" : fmt.id === "feed" ? "w-3 h-3" : "w-4 h-2.5"
+                          fmt.id === "story" ? "w-2 h-3.5"
+                          : fmt.id === "feed-square" ? "w-3 h-3"
+                          : fmt.id === "feed-portrait" ? "w-2.5 h-3"
+                          : "w-4 h-2.5"
                         }`} />
                         {fmt.label}
                         <span className="opacity-60">{fmt.ratio}</span>
