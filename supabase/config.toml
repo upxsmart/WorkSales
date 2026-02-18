@@ -2,3 +2,6 @@ project_id = "mkbsaitjqwxlpiurbibm"
 
 [functions.agent-chat]
 verify_jwt = false
+
+[functions.kb-import]
+verify_jwt = false
