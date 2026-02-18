@@ -15,9 +15,8 @@ import MetaAdsConnect from "@/components/MetaAdsConnect";
 import {
   ArrowLeft, Send, Loader2, Trash2, User, Bot,
   Check, RefreshCw, Download, Share2, Clock, RotateCcw,
-  ImageIcon, Sparkles,
+  ImageIcon, Sparkles, ExternalLink, ArrowRightLeft,
 } from "lucide-react";
-import { ExternalLink } from "lucide-react";
 
 
 type AgentOutput = {
@@ -81,6 +80,8 @@ const AgentChat = () => {
   const [selectedFormat, setSelectedFormat] = useState<CreativeFormat>(CREATIVE_FORMATS[1]);
   // AG-IMG: number of image variations to generate at once
   const [imageCount, setImageCount] = useState<1 | 2 | 4>(1);
+  // true when AG-IMG was opened with a pre-filled briefing from AC-DC
+  const [fromAcDc, setFromAcDc] = useState(false);
 
   const agent = agentCode && agentCode in AGENTS_CONFIG
     ? AGENTS_CONFIG[agentCode as AgentCode]
@@ -303,11 +304,12 @@ const AgentChat = () => {
     }
   }, [projectId, agentCode, outputs.length, toast]);
 
-  // Pré-preenche o input quando chegou via navegação com state (ex: AC-DC → AG-IMG)
+  // Pré-preenche o input quando chegado via navegação com state (ex: AC-DC → AG-IMG)
   useEffect(() => {
     const state = location.state as { prefillInput?: string } | null;
     if (state?.prefillInput) {
       setInput(state.prefillInput);
+      setFromAcDc(true);
       // Limpa o state para não repreencher ao navegar de volta
       window.history.replaceState({}, "");
     }
@@ -346,8 +348,21 @@ const AgentChat = () => {
           <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${agent.color} flex items-center justify-center`}>
             <AgentIcon className="w-5 h-5 text-white" />
           </div>
-          <div className="flex-1">
-            <h1 className="font-display font-semibold text-sm">{agent.fullName}</h1>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="font-display font-semibold text-sm">{agent.fullName}</h1>
+              {/* Chip: shown only on AG-IMG when opened from AC-DC */}
+              {agentCode === "AG-IMG" && fromAcDc && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.85, x: -6 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-[11px] font-medium shrink-0"
+                >
+                  <ArrowRightLeft className="w-3 h-3" />
+                  Briefing recebido do AC-DC
+                </motion.div>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               {agent.code} · {agentCode === "AC-DC" ? "Banana Pro · Geração de Imagens" : agentCode === "AG-IMG" ? "Nano Banana HD · Creator de Imagens" : "Gemini 3 Flash"}
             </p>
