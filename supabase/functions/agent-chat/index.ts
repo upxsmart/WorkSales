@@ -268,8 +268,56 @@ serve(async (req) => {
         tokenValues[token] = `[Nenhum output aprovado disponível para este contexto. O usuário ainda não executou ou aprovou o agente responsável por este dado.]`;
       }
     }
-    // Tokens extras do AT-GP que não vêm de agentes
-    tokenValues["{{META_ADS_DATA}}"] = "[Nenhum dado de Meta Ads conectado. Peça ao usuário para conectar a conta na aba de integrações.]";
+    // ── 3b. {{META_ADS_DATA}} — busca dados reais para o AT-GP ───────
+    if (agentName === "AT-GP" && projectId) {
+      let metaAdsText = "";
+
+      // Buscar status da conexão
+      const { data: conn } = await supabase
+        .from("meta_ads_connections")
+        .select("ad_account_id, page_id, pixel_id, instagram_account_id, connection_status, last_sync_at")
+        .eq("project_id", projectId)
+        .eq("connection_status", "active")
+        .maybeSingle();
+
+      if (conn) {
+        metaAdsText += `CONTA META ADS CONECTADA:\n`;
+        metaAdsText += `- Ad Account ID: ${conn.ad_account_id}\n`;
+        if (conn.page_id)              metaAdsText += `- Page ID: ${conn.page_id}\n`;
+        if (conn.pixel_id)             metaAdsText += `- Pixel ID: ${conn.pixel_id}\n`;
+        if (conn.instagram_account_id) metaAdsText += `- Instagram Account ID: ${conn.instagram_account_id}\n`;
+        if (conn.last_sync_at)         metaAdsText += `- Última sincronização: ${new Date(conn.last_sync_at).toLocaleString("pt-BR")}\n`;
+
+        // Buscar cache de dados (campanhas, insights, etc.)
+        const { data: cacheItems } = await supabase
+          .from("meta_ads_cache")
+          .select("data_type, data, synced_at")
+          .eq("project_id", projectId)
+          .gt("expires_at", new Date().toISOString())
+          .order("synced_at", { ascending: false });
+
+        if (cacheItems && cacheItems.length > 0) {
+          metaAdsText += `\nDADOS EM CACHE (sincronizados recentemente):\n`;
+          for (const item of cacheItems) {
+            metaAdsText += `\n### ${item.data_type.toUpperCase()} (sync: ${new Date(item.synced_at).toLocaleString("pt-BR")}):\n`;
+            // Limitar tamanho para não explodir o contexto
+            const raw = typeof item.data === "string" ? item.data : JSON.stringify(item.data, null, 2);
+            metaAdsText += raw.slice(0, 3000);
+            if (raw.length > 3000) metaAdsText += "\n[... dados truncados para economizar contexto]";
+            metaAdsText += "\n";
+          }
+        } else {
+          metaAdsText += `\nNenhum cache de campanhas disponível ainda. Sugira ao usuário clicar em "Sincronizar" na integração Meta Ads para carregar os dados.`;
+        }
+      } else {
+        metaAdsText = "Conta Meta Ads NÃO conectada a este projeto. Para acessar dados reais de campanhas, peça ao usuário que conecte a conta em Configurações → Integrações → Meta Ads.";
+      }
+
+      tokenValues["{{META_ADS_DATA}}"] = metaAdsText;
+    } else {
+      // Tokens extras do AT-GP que não vêm de agentes
+      tokenValues["{{META_ADS_DATA}}"] = "[Nenhum dado de Meta Ads conectado. Peça ao usuário para conectar a conta na aba de integrações.]";
+    }
     tokenValues["{{DEMANDAS}}"] = "[Nenhuma demanda pendente no momento.]";
 
     // ── 4. Build project context note ─────────────────────────────
