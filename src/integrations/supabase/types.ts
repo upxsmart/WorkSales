@@ -120,6 +120,42 @@ export type Database = {
           },
         ]
       }
+      api_configs: {
+        Row: {
+          created_at: string
+          description: string
+          id: string
+          is_active: boolean
+          key_name: string
+          key_value: string
+          last_test_status: string | null
+          last_tested_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          key_name: string
+          key_value?: string
+          last_test_status?: string | null
+          last_tested_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: string
+          is_active?: boolean
+          key_name?: string
+          key_value?: string
+          last_test_status?: string | null
+          last_tested_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           agent_name: string
