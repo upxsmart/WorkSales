@@ -17,17 +17,17 @@ const AGENT_DEPENDENCIES: Record<string, string[]> = {
   "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC"],
 };
 
-// AC-DC: Image generation agent using Nano Banana Pro
+// AC-DC: Image generation agent using Nano Banana (fast model to avoid timeout)
 const IMAGE_AGENT = "AC-DC";
-const IMAGE_MODEL = "google/gemini-3-pro-image-preview";
+const IMAGE_MODEL = "google/gemini-2.5-flash-image";
 
 /**
- * Detects if a message contains a request to generate an image.
- * Returns the image prompt to pass to the model.
+ * Build a concise image generation prompt
  */
-function extractImagePrompt(userMessage: string, systemPrompt: string): string {
-  // Build a prompt that tells the model to generate an image
-  return `${systemPrompt}\n\nO usuário pediu: ${userMessage}\n\nGere uma imagem criativa e profissional baseada nesse briefing.`;
+function buildImagePrompt(userMessage: string, systemPrompt: string): string {
+  // Limit system prompt to avoid token bloat and reduce latency
+  const systemSummary = systemPrompt.slice(0, 400);
+  return `Você é um designer criativo especialista em criativos publicitários de alta conversão. ${systemSummary}\n\nCrie uma imagem publicitária profissional, moderna e impactante para: ${userMessage}`;
 }
 
 /**
@@ -40,10 +40,8 @@ async function uploadImageToStorage(
   projectId?: string
 ): Promise<string | null> {
   try {
-    // Remove data URL prefix if present
     const base64 = base64Data.replace(/^data:image\/\w+;base64,/, "");
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-
     const fileName = `${agentCode}/${projectId || "general"}/${Date.now()}.png`;
 
     const { error } = await supabase.storage
@@ -93,7 +91,7 @@ serve(async (req) => {
 
     const systemPrompt = promptRow?.system_prompt ||
       (agentName === IMAGE_AGENT
-        ? "Você é o AC-DC, um agente especialista em design visual e criação de criativos publicitários. Quando o usuário pedir um criativo, gere imagens profissionais, modernas e impactantes. Responda sempre em português brasileiro."
+        ? "Você é o AC-DC, um agente especialista em design visual e criação de criativos publicitários. Crie imagens profissionais, modernas e impactantes para marketing digital."
         : "Você é um assistente de IA útil. Responda em português brasileiro.");
 
     // 2. Fetch knowledge base
@@ -147,7 +145,7 @@ serve(async (req) => {
     const fullSystemPrompt = systemPrompt + knowledgeContext + contextNote + crossAgentContext;
 
     // =============================================
-    // AC-DC: Image Generation with Nano Banana Pro
+    // AC-DC: Image Generation with Nano Banana
     // =============================================
     if (agentName === IMAGE_AGENT) {
       const lastUserMessage = messages.filter((m: { role: string }) => m.role === "user").pop();
@@ -159,27 +157,48 @@ serve(async (req) => {
         });
       }
 
-      // Build conversation history for image model
       const imageMessages = [
         {
           role: "user",
-          content: extractImagePrompt(lastUserMessage.content, fullSystemPrompt),
+          content: buildImagePrompt(lastUserMessage.content, fullSystemPrompt),
         },
       ];
 
-      // Call Nano Banana Pro (image generation)
-      const imageResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: IMAGE_MODEL,
-          messages: imageMessages,
-          modalities: ["image", "text"],
-        }),
-      });
+      console.log(`AC-DC: generating image for prompt: ${lastUserMessage.content.slice(0, 100)}`);
+
+      // Use AbortController with 55s timeout to stay within edge function limits
+      const imageAbort = new AbortController();
+      const imageTimeout = setTimeout(() => imageAbort.abort(), 55000);
+
+      let imageResponse: Response;
+      try {
+        imageResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: IMAGE_MODEL,
+            messages: imageMessages,
+            modalities: ["image", "text"],
+          }),
+          signal: imageAbort.signal,
+        });
+      } catch (fetchErr) {
+        clearTimeout(imageTimeout);
+        console.error("Image fetch error:", fetchErr);
+        const isTimeout = fetchErr instanceof Error && fetchErr.name === "AbortError";
+        return new Response(JSON.stringify({
+          error: isTimeout
+            ? "A geração de imagem excedeu o tempo limite. Tente uma descrição mais simples."
+            : "Erro ao conectar com o serviço de geração de imagens."
+        }), {
+          status: 504,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      clearTimeout(imageTimeout);
 
       if (!imageResponse.ok) {
         if (imageResponse.status === 429) {
@@ -203,9 +222,13 @@ serve(async (req) => {
       }
 
       const imageData = await imageResponse.json();
+      console.log("AC-DC: image API response received, processing...");
+
       const choice = imageData.choices?.[0]?.message;
       const textContent: string = choice?.content || "";
       const generatedImages: Array<{ type: string; image_url: { url: string } }> = choice?.images || [];
+
+      console.log(`AC-DC: got ${generatedImages.length} image(s) from model`);
 
       // Upload images to storage and collect URLs
       const imageUrls: string[] = [];
@@ -217,14 +240,14 @@ serve(async (req) => {
         }
       }
 
-      // Build response payload for the client
+      console.log(`AC-DC: uploaded ${imageUrls.length} image(s) to storage`);
+
       const responsePayload = {
         type: "image_result",
         text: textContent || "Aqui está o criativo gerado! 🎨",
         images: imageUrls,
       };
 
-      // Return as a single non-streaming JSON with special type
       return new Response(JSON.stringify(responsePayload), {
         headers: { ...corsHeaders, "Content-Type": "application/json", "X-Response-Type": "image" },
       });
