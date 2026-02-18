@@ -51,6 +51,8 @@ interface PlanRow {
   llm_model: string;
   image_model: string;
   is_active: boolean;
+  meta_ads_enabled: boolean;
+  meta_ads_syncs_per_day: number;
 }
 
 // ─── Constants ───────────────────────────────────────────
@@ -344,6 +346,8 @@ const AdminSettings = () => {
       llm_model: plan.llm_model,
       image_model: plan.image_model,
       is_active: plan.is_active,
+      meta_ads_enabled: plan.meta_ads_enabled,
+      meta_ads_syncs_per_day: plan.meta_ads_syncs_per_day,
     }).eq("id", plan.id);
     setSavingPlan(null);
     if (error) toast.error("Erro ao salvar plano");
@@ -618,6 +622,37 @@ const AdminSettings = () => {
                         ))}
                       </select>
                     </div>
+                  </div>
+
+                  {/* ── Meta Ads ── */}
+                  <div className="border-t border-border/30 pt-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                    <div className="flex items-center gap-3 flex-1">
+                      <Switch
+                        checked={plan.meta_ads_enabled ?? false}
+                        onCheckedChange={(v) => updatePlanField(plan.id, "meta_ads_enabled", v)}
+                      />
+                      <Label className="text-sm cursor-pointer">
+                        Meta Ads habilitado
+                      </Label>
+                      {plan.meta_ads_enabled && (
+                        <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-400">
+                          Ativo
+                        </Badge>
+                      )}
+                    </div>
+                    {plan.meta_ads_enabled && (
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">Syncs/dia</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={96}
+                          value={plan.meta_ads_syncs_per_day ?? 0}
+                          onChange={(e) => updatePlanField(plan.id, "meta_ads_syncs_per_day", Number(e.target.value))}
+                          className="h-8 w-20 text-sm bg-secondary/50"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
