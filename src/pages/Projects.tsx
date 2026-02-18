@@ -15,10 +15,12 @@ import { toast } from "@/hooks/use-toast";
 import {
   Plus, FolderKanban, Trash2, Pencil, Calendar, Target,
   Users as UsersIcon, DollarSign, Package, MoreVertical,
+  Images, ChevronDown,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import ProjectGallery from "@/components/ProjectGallery";
 
 interface Project {
   id: string;
@@ -48,6 +50,7 @@ const Projects = () => {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [expandedGallery, setExpandedGallery] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -285,7 +288,41 @@ const Projects = () => {
                 <div className="flex items-center gap-2 mt-4 pt-3 border-t border-border/50 text-xs text-muted-foreground">
                   <Calendar className="w-3.5 h-3.5" />
                   Criado em {new Date(project.created_at).toLocaleDateString("pt-BR")}
+
+                  {/* Gallery toggle */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedGallery(expandedGallery === project.id ? null : project.id);
+                    }}
+                    className={`ml-auto flex items-center gap-1 px-2 py-0.5 rounded-lg border text-xs transition-colors ${
+                      expandedGallery === project.id
+                        ? "border-primary/50 bg-primary/10 text-primary"
+                        : "border-border hover:border-primary/40 hover:text-foreground"
+                    }`}
+                  >
+                    <Images className="w-3 h-3" />
+                    Criativos
+                    <ChevronDown className={`w-3 h-3 transition-transform ${expandedGallery === project.id ? "rotate-180" : ""}`} />
+                  </button>
                 </div>
+
+                {/* Gallery panel */}
+                <AnimatePresence>
+                  {expandedGallery === project.id && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.22 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="pt-1 border-t border-border/50 mt-3">
+                        <ProjectGallery projectId={project.id} projectName={project.name} />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             ))}
           </AnimatePresence>
