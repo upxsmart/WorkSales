@@ -449,34 +449,20 @@ serve(async (req) => {
 
       const imageData = await imageResponse.json();
 
-      // Parse response — Google AI Studio direct vs Lovable gateway have different shapes
+      // Parse Lovable Gateway response format:
+      // choices[0].message.content + choices[0].message.images[].image_url.url
       let textContent = "";
       const imageUrls: string[] = [];
 
-      if (GOOGLE_API_KEY) {
-        // Google AI Studio response format
-        // candidates[0].content.parts[] → { text } or { inlineData: { mimeType, data } }
-        const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> =
-          imageData?.candidates?.[0]?.content?.parts || [];
-        for (const part of parts) {
-          if (part.text) textContent += part.text;
-          if (part.inlineData?.data) {
-            const base64 = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-            const publicUrl = await uploadImageToStorage(supabase, base64, agentName, projectId);
-            if (publicUrl) imageUrls.push(publicUrl);
-          }
-        }
-      } else {
-        // Lovable gateway response format
-        const choice = imageData.choices?.[0]?.message;
-        textContent = choice?.content || "";
-        const gatewayImages: Array<{ image_url: { url: string } }> = choice?.images || [];
-        for (const img of gatewayImages) {
-          const rawUrl = img.image_url?.url || "";
-          if (rawUrl) {
-            const publicUrl = await uploadImageToStorage(supabase, rawUrl, agentName, projectId);
-            if (publicUrl) imageUrls.push(publicUrl);
-          }
+      const choice = imageData.choices?.[0]?.message;
+      textContent = choice?.content || "";
+      const gatewayImages: Array<{ image_url: { url: string } }> = choice?.images || [];
+      for (const img of gatewayImages) {
+        const rawUrl = img.image_url?.url || "";
+        if (rawUrl) {
+          const publicUrl = await uploadImageToStorage(supabase, rawUrl, agentName, projectId);
+          if (publicUrl) imageUrls.push(publicUrl);
+          else imageUrls.push(rawUrl); // fallback: use base64 directly if storage upload fails
         }
       }
 
