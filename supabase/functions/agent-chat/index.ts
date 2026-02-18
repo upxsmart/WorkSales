@@ -71,10 +71,10 @@ async function getUserFromAuth(
 ): Promise<{ userId: string; profile: Record<string, unknown> } | null> {
   if (!authHeader?.startsWith("Bearer ")) return null;
   const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims) return null;
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user) return null;
 
-  const userId = data.claims.sub as string;
+  const userId = data.user.id;
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, plan, interactions_used, interactions_limit, creatives_used, creatives_limit")
