@@ -16,7 +16,8 @@ const AGENT_DEPENDENCIES: Record<string, string[]> = {
   "AC-DC": ["AA-D100", "AO-GO", "AM-CC"],
   "AE-C": ["AA-D100", "AO-GO", "AM-CC", "AJ-AF"],
   "AT-GP": ["AA-D100", "AO-GO", "AM-CC", "AC-DC"],
-  "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP"],
+  "AG-IMG": ["AC-DC"],
+  "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP", "AG-IMG"],
 };
 
 // Map agent code → template token used in system prompts
@@ -39,7 +40,8 @@ function outputToText(out: { title?: string; output_type?: string; output_data: 
   return `${header}\n${body}`;
 }
 
-const IMAGE_AGENT = "AC-DC";
+// Agents that generate images
+const IMAGE_AGENTS = new Set(["AC-DC", "AG-IMG"]);
 const IMAGE_MODEL = "google/gemini-3-pro-image-preview";
 const TEXT_MODEL = "google/gemini-3-flash-preview";
 
@@ -50,8 +52,11 @@ const PLAN_LIMITS: Record<string, number> = {
   scale: 2000,
 };
 
-function buildImagePrompt(userMessage: string, systemPrompt: string): string {
+function buildImagePrompt(userMessage: string, systemPrompt: string, agentCode: string): string {
   const systemSummary = systemPrompt.slice(0, 400);
+  if (agentCode === "AG-IMG") {
+    return `Você é um agente gerador de imagens publicitárias de alta definição especializado. Crie uma imagem profissional, impactante e pronta para veiculação em anúncios digitais. Use alta fidelidade de cores, composição equilibrada e estética premium. ${systemSummary}\n\nPrompt/briefing recebido: ${userMessage}`;
+  }
   return `Você é um designer criativo especialista em criativos publicitários de alta conversão. ${systemSummary}\n\nCrie uma imagem publicitária profissional, moderna e impactante para: ${userMessage}`;
 }
 
@@ -176,7 +181,7 @@ serve(async (req) => {
 
     // ── Usage limit check ───────────────────────────────────────────
     if (userId && userProfile) {
-      const isImage = agentName === IMAGE_AGENT;
+      const isImage = IMAGE_AGENTS.has(agentName);
       const usedField = isImage ? "creatives_used" : "interactions_used";
       const limitField = isImage ? "creatives_limit" : "interactions_limit";
       const used = (userProfile[usedField] as number) || 0;
@@ -360,9 +365,9 @@ serve(async (req) => {
     const fullSystemPrompt = interpolatedPrompt + knowledgeContext;
 
     // ═══════════════════════════════════════════════════════════════
-    // AC-DC: Image Generation
+    // AC-DC / AG-IMG: Image Generation
     // ═══════════════════════════════════════════════════════════════
-    if (agentName === IMAGE_AGENT) {
+    if (IMAGE_AGENTS.has(agentName)) {
       const lastUserMessage = messages
         .filter((m: { role: string }) => m.role === "user")
         .pop();
@@ -377,11 +382,11 @@ serve(async (req) => {
       const imageMessages = [
         {
           role: "user",
-          content: buildImagePrompt(lastUserMessage.content, fullSystemPrompt),
+          content: buildImagePrompt(lastUserMessage.content, fullSystemPrompt, agentName),
         },
       ];
 
-      console.log(`AC-DC: generating image for: ${lastUserMessage.content.slice(0, 100)}`);
+      console.log(`${agentName}: generating image for: ${lastUserMessage.content.slice(0, 100)}`);
 
       const imageAbort = new AbortController();
       const imageTimeout = setTimeout(() => imageAbort.abort(), 55000);

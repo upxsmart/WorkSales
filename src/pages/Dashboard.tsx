@@ -21,7 +21,8 @@ const AGENT_DEPENDENCIES: Record<string, string[]> = {
   "AE-C": ["AA-D100", "AO-GO", "AM-CC"],
   "AM-CC": ["AA-D100", "AO-GO"],
   "AC-DC": ["AA-D100", "AO-GO", "AM-CC"],
-  "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC"],
+  "AG-IMG": ["AC-DC"],
+  "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP", "AG-IMG"],
 };
 
 const Dashboard = () => {
@@ -106,7 +107,7 @@ const Dashboard = () => {
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-display font-semibold">Progresso da Estrutura</h3>
           <span className="text-sm text-muted-foreground">
-            {completedCount}/7 agentes com outputs aprovados
+            {completedCount}/{AGENTS.length} agentes com outputs aprovados
           </span>
         </div>
         <Progress value={progressPercent} className="h-2" />
@@ -119,7 +120,7 @@ const Dashboard = () => {
 
       {/* Agent grid */}
       <div>
-        <h3 className="font-display text-xl font-bold mb-4">Seus 7 Agentes de IA</h3>
+        <h3 className="font-display text-xl font-bold mb-4">Seus {AGENTS.length} Agentes de IA</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {AGENTS.map((agent, i) => {
             const IconComp = agent.icon;
