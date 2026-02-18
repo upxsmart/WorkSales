@@ -212,8 +212,8 @@ serve(async (req) => {
 
     const systemPrompt =
       promptRow?.system_prompt ||
-      (agentName === IMAGE_AGENT
-        ? "Você é o AC-DC, um agente especialista em design visual e criação de criativos publicitários."
+      (IMAGE_AGENTS.has(agentName)
+        ? "Você é um agente especialista em criação de imagens publicitárias de alta definição."
         : "Você é um assistente de IA útil. Responda em português brasileiro.");
 
     // ── 2. Fetch knowledge base ────────────────────────────────────
