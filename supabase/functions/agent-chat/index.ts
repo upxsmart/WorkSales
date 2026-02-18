@@ -19,6 +19,26 @@ const AGENT_DEPENDENCIES: Record<string, string[]> = {
   "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP"],
 };
 
+// Map agent code → template token used in system prompts
+const AGENT_TO_TOKEN: Record<string, string> = {
+  "AA-D100": "{{PERSONAS}}",
+  "AO-GO":   "{{OFERTAS}}",
+  "AJ-AF":   "{{FUNIL}}",
+  "AM-CC":   "{{COPY}}",
+  "AC-DC":   "{{CRIATIVOS}}",
+  "AE-C":    "{{ENGAJAMENTO}}",
+  "AT-GP":   "{{TRAFEGO}}",
+};
+
+/** Extrai texto legível de um output salvo */
+function outputToText(out: { title?: string; output_type?: string; output_data: unknown }): string {
+  const header = `[${out.title || out.output_type || "Output"}]`;
+  const body = typeof out.output_data === "string"
+    ? out.output_data
+    : JSON.stringify(out.output_data, null, 2);
+  return `${header}\n${body}`;
+}
+
 const IMAGE_AGENT = "AC-DC";
 const IMAGE_MODEL = "google/gemini-2.5-flash-image";
 const TEXT_MODEL = "google/gemini-3-flash-preview";
@@ -208,7 +228,9 @@ serve(async (req) => {
     }
 
     // ── 3. Fetch approved outputs from dependency agents ───────────
-    let crossAgentContext = "";
+    // Agrupa outputs por agente e interpola tokens {{XYZ}} no system prompt
+    const tokenValues: Record<string, string> = {};
+
     if (projectId) {
       const deps = AGENT_DEPENDENCIES[agentName] || [];
       if (deps.length > 0) {
@@ -221,26 +243,49 @@ serve(async (req) => {
           .order("created_at", { ascending: false });
 
         if (outputs && outputs.length > 0) {
-          crossAgentContext = "\n\n--- OUTPUTS APROVADOS DE OUTROS AGENTES ---\n";
+          // Agrupar por agente (pegar o mais recente de cada)
+          const byAgent: Record<string, string[]> = {};
           for (const out of outputs) {
-            crossAgentContext += `\n### [${out.agent_name}] ${out.title || out.output_type}\n`;
-            crossAgentContext += typeof out.output_data === "string"
-              ? out.output_data
-              : JSON.stringify(out.output_data, null, 2);
-            crossAgentContext += "\n";
+            if (!byAgent[out.agent_name]) byAgent[out.agent_name] = [];
+            byAgent[out.agent_name].push(outputToText(out));
           }
-          crossAgentContext +=
-            "\n--- FIM DOS OUTPUTS ---\n\nUse esses outputs como contexto para suas respostas. Referencie-os quando relevante.";
+
+          // Preencher mapa de tokens
+          for (const [agentCode, texts] of Object.entries(byAgent)) {
+            const token = AGENT_TO_TOKEN[agentCode];
+            if (token) {
+              tokenValues[token] = texts.join("\n\n");
+            }
+          }
         }
       }
     }
 
-    // ── 4. Build project context note ─────────────────────────────
-    const contextNote = projectContext
-      ? `\n\nContexto do projeto do usuário:\n- Nicho: ${projectContext.nicho || "não informado"}\n- Público-alvo: ${projectContext.publico_alvo || "não informado"}\n- Objetivo: ${projectContext.objetivo || "não informado"}\n- Faturamento: ${projectContext.faturamento || "não informado"}\n- Produto: ${projectContext.product_description || "não informado"}`
-      : "";
+    // Tokens sem dados disponíveis → substituir por mensagem informativa
+    const allTokens = Object.values(AGENT_TO_TOKEN);
+    for (const token of allTokens) {
+      if (!tokenValues[token]) {
+        tokenValues[token] = `[Nenhum output aprovado disponível para este contexto. O usuário ainda não executou ou aprovou o agente responsável por este dado.]`;
+      }
+    }
+    // Tokens extras do AT-GP que não vêm de agentes
+    tokenValues["{{META_ADS_DATA}}"] = "[Nenhum dado de Meta Ads conectado. Peça ao usuário para conectar a conta na aba de integrações.]";
+    tokenValues["{{DEMANDAS}}"] = "[Nenhuma demanda pendente no momento.]";
 
-    const fullSystemPrompt = systemPrompt + knowledgeContext + contextNote + crossAgentContext;
+    // ── 4. Build project context note ─────────────────────────────
+    const projectInfo = projectContext
+      ? `Nicho: ${projectContext.nicho || "não informado"} | Público-alvo: ${projectContext.publico_alvo || "não informado"} | Objetivo: ${projectContext.objetivo || "não informado"} | Faturamento: ${projectContext.faturamento || "não informado"} | Produto: ${projectContext.product_description || "não informado"}`
+      : "Informações do projeto não disponíveis.";
+
+    tokenValues["{{PROJETO_INFO}}"] = projectInfo;
+
+    // ── 5. Interpolar todos os tokens no system prompt ─────────────
+    let interpolatedPrompt = systemPrompt;
+    for (const [token, value] of Object.entries(tokenValues)) {
+      interpolatedPrompt = interpolatedPrompt.replaceAll(token, value);
+    }
+
+    const fullSystemPrompt = interpolatedPrompt + knowledgeContext;
 
     // ═══════════════════════════════════════════════════════════════
     // AC-DC: Image Generation
