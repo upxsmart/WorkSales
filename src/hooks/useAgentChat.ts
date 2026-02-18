@@ -1,7 +1,11 @@
 import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 
-type Message = { role: "user" | "assistant"; content: string };
+export type Message = {
+  role: "user" | "assistant";
+  content: string;
+  images?: string[]; // public URLs for generated images (AC-DC)
+};
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-chat`;
 
@@ -21,21 +25,6 @@ export function useAgentChat() {
       const allMessages = [...messages, userMsg];
       setMessages((prev) => [...prev, userMsg]);
       setIsLoading(true);
-
-      let assistantSoFar = "";
-
-      const upsertAssistant = (chunk: string) => {
-        assistantSoFar += chunk;
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (last?.role === "assistant") {
-            return prev.map((m, i) =>
-              i === prev.length - 1 ? { ...m, content: assistantSoFar } : m
-            );
-          }
-          return [...prev, { role: "assistant", content: assistantSoFar }];
-        });
-      };
 
       try {
         const resp = await fetch(CHAT_URL, {
@@ -62,8 +51,41 @@ export function useAgentChat() {
           setIsLoading(false);
           return;
         }
+        if (!resp.ok) throw new Error("Falha ao conectar com IA");
 
-        if (!resp.ok || !resp.body) throw new Error("Falha ao conectar com IA");
+        // AC-DC returns image JSON (X-Response-Type: image), others stream SSE
+        const responseType = resp.headers.get("X-Response-Type");
+
+        if (responseType === "image") {
+          // Non-streaming image response
+          const data = await resp.json();
+          const assistantMsg: Message = {
+            role: "assistant",
+            content: data.text || "Criativo gerado! 🎨",
+            images: data.images || [],
+          };
+          setMessages((prev) => [...prev, assistantMsg]);
+          setIsLoading(false);
+          return;
+        }
+
+        // Streaming SSE for text agents
+        if (!resp.body) throw new Error("Sem body na resposta");
+
+        let assistantSoFar = "";
+
+        const upsertAssistant = (chunk: string) => {
+          assistantSoFar += chunk;
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last?.role === "assistant") {
+              return prev.map((m, i) =>
+                i === prev.length - 1 ? { ...m, content: assistantSoFar } : m
+              );
+            }
+            return [...prev, { role: "assistant", content: assistantSoFar }];
+          });
+        };
 
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
