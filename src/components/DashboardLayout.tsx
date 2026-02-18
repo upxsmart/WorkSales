@@ -8,7 +8,7 @@ import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   LayoutDashboard, FolderKanban, Bot, FileText, BarChart3,
-  Settings, LogOut, Menu, X, Shield, Brain, FolderOpen,
+  Settings, LogOut, Menu, X, Shield, Brain, FolderOpen, Images,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { label: "Meus Projetos", icon: FolderKanban, path: "/projects" },
   { label: "Agentes", icon: Bot, path: "/agents" },
   { label: "Orquestrador", icon: Brain, path: "/agent/ACO" },
+  { label: "Galeria", icon: Images, path: "/gallery" },
   { label: "Métricas", icon: BarChart3, path: "/metrics" },
   { label: "Documentos", icon: FileText, path: "/documents" },
   { label: "Configurações", icon: Settings, path: "/settings" },
