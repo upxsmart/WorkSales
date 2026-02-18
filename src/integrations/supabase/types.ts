@@ -155,6 +155,50 @@ export type Database = {
           },
         ]
       }
+      conversations: {
+        Row: {
+          agent_code: string
+          cost_usd: number
+          created_at: string
+          id: string
+          messages: Json
+          project_id: string
+          tokens_used: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agent_code: string
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          messages?: Json
+          project_id: string
+          tokens_used?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agent_code?: string
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          messages?: Json
+          project_id?: string
+          tokens_used?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
           category: string
@@ -232,31 +276,103 @@ export type Database = {
         }
         Relationships: []
       }
+      plans_config: {
+        Row: {
+          created_at: string
+          creatives_limit: number
+          features: Json
+          id: string
+          image_model: string
+          interactions_limit: number
+          is_active: boolean
+          llm_model: string
+          plan_code: string
+          plan_name: string
+          price_brl: number
+          projects_limit: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          creatives_limit?: number
+          features?: Json
+          id?: string
+          image_model?: string
+          interactions_limit?: number
+          is_active?: boolean
+          llm_model?: string
+          plan_code: string
+          plan_name: string
+          price_brl?: number
+          projects_limit?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          creatives_limit?: number
+          features?: Json
+          id?: string
+          image_model?: string
+          interactions_limit?: number
+          is_active?: boolean
+          llm_model?: string
+          plan_code?: string
+          plan_name?: string
+          price_brl?: number
+          projects_limit?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
+          creatives_limit: number
+          creatives_used: number
           id: string
+          interactions_limit: number
+          interactions_used: number
           name: string
           onboarding_completed: boolean
           plan: string
+          plan_status: string
+          projects_limit: number
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          creatives_limit?: number
+          creatives_used?: number
           id?: string
+          interactions_limit?: number
+          interactions_used?: number
           name?: string
           onboarding_completed?: boolean
           plan?: string
+          plan_status?: string
+          projects_limit?: number
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
+          creatives_limit?: number
+          creatives_used?: number
           id?: string
+          interactions_limit?: number
+          interactions_used?: number
           name?: string
           onboarding_completed?: boolean
           plan?: string
+          plan_status?: string
+          projects_limit?: number
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -265,6 +381,7 @@ export type Database = {
       projects: {
         Row: {
           created_at: string
+          description: string | null
           faturamento: string | null
           has_product: boolean | null
           id: string
@@ -272,12 +389,15 @@ export type Database = {
           nicho: string | null
           objetivo: string | null
           product_description: string | null
+          progress: Json
           publico_alvo: string | null
+          status: string
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          description?: string | null
           faturamento?: string | null
           has_product?: boolean | null
           id?: string
@@ -285,12 +405,15 @@ export type Database = {
           nicho?: string | null
           objetivo?: string | null
           product_description?: string | null
+          progress?: Json
           publico_alvo?: string | null
+          status?: string
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
+          description?: string | null
           faturamento?: string | null
           has_product?: boolean | null
           id?: string
@@ -298,8 +421,49 @@ export type Database = {
           nicho?: string | null
           objetivo?: string | null
           product_description?: string | null
+          progress?: Json
           publico_alvo?: string | null
+          status?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      usage_logs: {
+        Row: {
+          action: string
+          agent_code: string
+          cost_usd: number
+          created_at: string
+          id: string
+          model_used: string | null
+          project_id: string | null
+          tokens_input: number
+          tokens_output: number
+          user_id: string
+        }
+        Insert: {
+          action?: string
+          agent_code: string
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          model_used?: string | null
+          project_id?: string | null
+          tokens_input?: number
+          tokens_output?: number
+          user_id: string
+        }
+        Update: {
+          action?: string
+          agent_code?: string
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          model_used?: string | null
+          project_id?: string | null
+          tokens_input?: number
+          tokens_output?: number
           user_id?: string
         }
         Relationships: []
