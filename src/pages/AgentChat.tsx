@@ -301,7 +301,7 @@ const AgentChat = () => {
           <div className="flex-1">
             <h1 className="font-display font-semibold text-sm">{agent.fullName}</h1>
             <p className="text-xs text-muted-foreground">
-              {agent.code} · {agentCode === "AC-DC" ? "Nano Banana Pro · Geração de Imagens" : "Gemini 3 Flash"}
+              {agent.code} · {agentCode === "AC-DC" ? "Banana Pro · Geração de Imagens" : "Gemini 3 Flash"}
             </p>
           </div>
           {messages.length > 0 && (
@@ -349,7 +349,7 @@ const AgentChat = () => {
                           <div className="space-y-2">
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <Sparkles className="w-3 h-3 text-primary" />
-                              <span>Criativo gerado com Nano Banana Pro</span>
+                              <span>Criativo gerado com Banana Pro</span>
                             </div>
                             <div className={`grid gap-2 ${msg.images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                               {msg.images.map((url, imgIdx) => (
@@ -419,7 +419,7 @@ const AgentChat = () => {
                     {agentCode === "AC-DC" ? (
                       <>
                         <ImageIcon className="w-4 h-4 animate-pulse text-primary" />
-                        <span className="text-xs text-muted-foreground">Gerando criativo com Nano Banana Pro...</span>
+                        <span className="text-xs text-muted-foreground">Gerando criativo com Banana Pro...</span>
                       </>
                     ) : (
                       <>
@@ -553,7 +553,7 @@ const AgentChat = () => {
                     <div className="space-y-3">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Sparkles className="w-3 h-3 text-primary" />
-                        <span>Nano Banana Pro · {lastAssistantMsg.images.length} criativo{lastAssistantMsg.images.length > 1 ? "s" : ""}</span>
+                        <span>Banana Pro · {lastAssistantMsg.images.length} criativo{lastAssistantMsg.images.length > 1 ? "s" : ""}</span>
                       </div>
                       <div className={`grid gap-3 ${lastAssistantMsg.images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                         {lastAssistantMsg.images.map((url, idx) => (
