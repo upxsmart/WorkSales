@@ -1,4 +1,4 @@
-import { Users, Target, GitBranch, MessageCircle, PenTool, Palette, Brain, Megaphone } from "lucide-react";
+import { Users, Target, GitBranch, MessageCircle, PenTool, Palette, Brain, Megaphone, ImagePlay } from "lucide-react";
 
 export const AGENTS_CONFIG = {
   "AA-D100": {
@@ -120,6 +120,23 @@ export const AGENTS_CONFIG = {
     outputTypes: ["Plano de Mídia", "Estrutura de Campanha", "Configuração de Públicos", "Specs de Anúncios", "Relatório de Performance", "Demandas para Agentes"],
     dependencies: ["AA-D100", "AO-GO", "AM-CC", "AC-DC"],
   },
+  "AG-IMG": {
+    code: "AG-IMG",
+    name: "Creator de Imagens",
+    fullName: "Agente Creator de Imagens HD",
+    description: "Recebe briefings do AC-DC e gera criativos publicitários em alta definição com Nano Banana (Gemini Image).",
+    color: "from-violet-500 to-fuchsia-600",
+    icon: ImagePlay,
+    greeting: "Olá! Sou o AG-IMG, seu Creator de Imagens HD. 🖼️\n\nVou transformar os briefings e prompts criados pelo AC-DC em imagens publicitárias de alta definição prontas para usar.\n\nPara começar:\n1. **Cole aqui o prompt ou briefing gerado pelo AC-DC**\n2. **Ou descreva diretamente o criativo que você quer** (produto, estilo, cores, formato)\n3. **Qual a plataforma de destino?** (Instagram Story, Feed, YouTube, etc.)",
+    suggestions: [
+      "Gere um banner para Story 9:16 com o briefing do AC-DC",
+      "Crie 3 variações de feed 1:1 para o mesmo criativo",
+      "Produza um banner horizontal 16:9 para YouTube",
+      "Gere um criativo minimalista com fundo escuro para o nicho",
+    ],
+    outputTypes: ["Criativo Story 9:16", "Criativo Feed 1:1", "Banner 16:9", "Feed Portrait 4:5", "Variações de Anúncio"],
+    dependencies: ["AC-DC"],
+  },
   "ACO": {
     code: "ACO",
     name: "Orquestrador Central",
@@ -135,7 +152,7 @@ export const AGENTS_CONFIG = {
       "Qual a ordem ideal para usar os agentes?",
     ],
     outputTypes: ["Diagnóstico de Coerência", "Gaps Identificados", "Plano de Ação", "Matriz de Dependências", "Score de Maturidade", "Plano Completo do Negócio"],
-    dependencies: ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP"],
+    dependencies: ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP", "AG-IMG"],
   },
 } as const;
 
@@ -150,7 +167,8 @@ export const AGENT_DEPENDENCIES: Record<string, string[]> = {
   "AC-DC": ["AA-D100", "AO-GO", "AM-CC"],
   "AE-C": ["AA-D100", "AO-GO", "AM-CC", "AJ-AF"],
   "AT-GP": ["AA-D100", "AO-GO", "AM-CC", "AC-DC"],
-  "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP"],
+  "AG-IMG": ["AC-DC"],
+  "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP", "AG-IMG"],
 };
 
 // Ordem de execução no modo orquestrador
@@ -159,7 +177,8 @@ export const ORCHESTRATOR_EXECUTION_ORDER = [
   { agent: "AO-GO",  label: "Criando oferta Grand Slam..." },
   { agent: "AJ-AF",  label: "Mapeando jornada do funil..." },
   { agent: "AM-CC",  label: "Gerando copy e conteúdo estratégico..." },
-  { agent: "AC-DC",  label: "Definindo criativos visuais..." },
+  { agent: "AC-DC",  label: "Definindo criativos visuais e briefings..." },
+  { agent: "AG-IMG", label: "Gerando imagens HD com Nano Banana..." },
   { agent: "AE-C",   label: "Criando scripts de vendas e engajamento..." },
   { agent: "AT-GP",  label: "Planejando estratégia de tráfego pago..." },
   { agent: "ACO",    label: "Compilando plano completo do negócio..." },

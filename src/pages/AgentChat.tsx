@@ -177,8 +177,9 @@ const AgentChat = () => {
 
   const handleSend = () => {
     if (!input.trim() || isLoading || !agentCode) return;
-    // For AC-DC, append format context to the prompt
-    const messageToSend = agentCode === "AC-DC"
+    // For image agents, append format context to the prompt
+    const isImageAgent = agentCode === "AC-DC" || agentCode === "AG-IMG";
+    const messageToSend = isImageAgent
       ? `${input.trim()}\n\n[Formato: ${selectedFormat.label} (${selectedFormat.ratio}) — ${selectedFormat.dimensions}]`
       : input.trim();
     sendMessage(
@@ -301,7 +302,7 @@ const AgentChat = () => {
           <div className="flex-1">
             <h1 className="font-display font-semibold text-sm">{agent.fullName}</h1>
             <p className="text-xs text-muted-foreground">
-              {agent.code} · {agentCode === "AC-DC" ? "Banana Pro · Geração de Imagens" : "Gemini 3 Flash"}
+              {agent.code} · {agentCode === "AC-DC" ? "Banana Pro · Geração de Imagens" : agentCode === "AG-IMG" ? "Nano Banana HD · Creator de Imagens" : "Gemini 3 Flash"}
             </p>
           </div>
           {messages.length > 0 && (
@@ -455,8 +456,8 @@ const AgentChat = () => {
           {/* Input */}
           <div className="border-t border-border bg-background/80 backdrop-blur-xl px-4 py-3">
             <div className="max-w-3xl mx-auto space-y-2">
-              {/* Format selector — AC-DC only */}
-              {agentCode === "AC-DC" && (
+              {/* Format selector — image agents only */}
+              {(agentCode === "AC-DC" || agentCode === "AG-IMG") && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground shrink-0">Formato:</span>
                   <div className="flex gap-1.5">
@@ -490,7 +491,13 @@ const AgentChat = () => {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={agentCode === "AC-DC" ? `Descreva o criativo ${selectedFormat.label} (${selectedFormat.ratio}) que deseja gerar...` : "Digite sua mensagem..."}
+                  placeholder={
+                    agentCode === "AG-IMG"
+                      ? `Cole o briefing do AC-DC ou descreva o criativo ${selectedFormat.label} (${selectedFormat.ratio})...`
+                      : agentCode === "AC-DC"
+                      ? `Descreva o criativo ${selectedFormat.label} (${selectedFormat.ratio}) que deseja gerar...`
+                      : "Digite sua mensagem..."
+                  }
                   className="min-h-[44px] max-h-32 resize-none"
                   rows={1}
                 />
