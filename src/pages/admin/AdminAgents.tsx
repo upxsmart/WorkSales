@@ -7,12 +7,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Save, Plus, Trash2, BookOpen, FileText,
-  CheckCircle2, Clock, History, Eye, EyeOff,
+  CheckCircle2, Clock, History, Eye, EyeOff, Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import KBImportModal from "@/components/admin/KBImportModal";
 
 type Prompt = {
   id: string;
@@ -49,6 +50,7 @@ const AdminAgents = () => {
   const [kbItems, setKbItems] = useState<KBItem[]>([]);
   const [showKbForm, setShowKbForm] = useState(false);
   const [kbForm, setKbForm] = useState({ title: "", content: "", category: "geral" });
+  const [showImport, setShowImport] = useState(false);
 
   // ──────────────────────────────
   // Fetch prompts for selected agent
@@ -356,10 +358,16 @@ const AdminAgents = () => {
               <p className="text-xs text-muted-foreground">
                 Documentos, links e referências injetados automaticamente no contexto do agente durante o chat.
               </p>
-              <Button size="sm" onClick={() => setShowKbForm(!showKbForm)}>
-                <Plus className="w-4 h-4 mr-2" />
-                Novo Item
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setShowImport(true)}>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Importar
+                </Button>
+                <Button size="sm" onClick={() => setShowKbForm(!showKbForm)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo Item
+                </Button>
+              </div>
             </div>
 
             {/* KB form */}
@@ -470,6 +478,17 @@ const AdminAgents = () => {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* KB Import Modal */}
+      <AnimatePresence>
+        {showImport && (
+          <KBImportModal
+            agentCode={selectedAgent}
+            onClose={() => setShowImport(false)}
+            onImported={fetchKbItems}
+          />
+        )}
+      </AnimatePresence>
     </AdminLayout>
   );
 };
