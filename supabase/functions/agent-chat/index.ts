@@ -42,7 +42,7 @@ function outputToText(out: { title?: string; output_type?: string; output_data: 
 
 // Agents that generate images
 const IMAGE_AGENTS = new Set(["AC-DC", "AG-IMG"]);
-const IMAGE_MODEL = "google/gemini-3-pro-image-preview";
+const IMAGE_MODEL = "google/gemini-2.5-flash-image"; // Nano Banana — Lovable Gateway
 const TEXT_MODEL = "google/gemini-3-flash-preview";
 
 // Plan interaction limits (fallback if plans_config unavailable)
@@ -391,51 +391,30 @@ serve(async (req) => {
       const imageAbort = new AbortController();
       const imageTimeout = setTimeout(() => imageAbort.abort(), 55000);
 
-      // Use direct Google AI Studio key if configured, fallback to Lovable gateway
-      const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY") ||
-        (await supabase.from("api_configs").select("key_value").eq("key_name", "GOOGLE_API_KEY").eq("is_active", true).maybeSingle().then(r => r.data?.key_value || ""));
+      // Always use Lovable AI Gateway for image generation (Nano Banana)
+      console.log(`${agentName}: generating image via Lovable AI Gateway (${IMAGE_MODEL})`);
 
       let imageResponse: Response;
       try {
-        if (GOOGLE_API_KEY) {
-          // Direct Google AI Studio call (Banana Pro)
-          console.log("AC-DC: using direct Google AI Studio key (Banana Pro)");
-          imageResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${GOOGLE_API_KEY}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: buildImagePrompt(lastUserMessage.content, fullSystemPrompt) }] }],
-                generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
-              }),
-              signal: imageAbort.signal,
-            }
-          );
-        } else {
-          // Fallback: Lovable AI Gateway
-          console.log("AC-DC: using Lovable AI Gateway for image (no GOOGLE_API_KEY)");
-          imageResponse = await fetch(
-            "https://ai.gateway.lovable.dev/v1/chat/completions",
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                model: IMAGE_MODEL,
-                messages: imageMessages,
-                modalities: ["image", "text"],
-              }),
-              signal: imageAbort.signal,
-            }
-          );
-        }
+        imageResponse = await fetch(
+          "https://ai.gateway.lovable.dev/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${LOVABLE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: IMAGE_MODEL,
+              messages: imageMessages,
+              modalities: ["image", "text"],
+            }),
+            signal: imageAbort.signal,
+          }
+        );
       } catch (fetchErr) {
         clearTimeout(imageTimeout);
-        const isTimeout =
-          fetchErr instanceof Error && fetchErr.name === "AbortError";
+        const isTimeout = fetchErr instanceof Error && fetchErr.name === "AbortError";
         return new Response(
           JSON.stringify({
             error: isTimeout
