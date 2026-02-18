@@ -11,11 +11,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
+import MetaAdsConnect from "@/components/MetaAdsConnect";
 import {
   ArrowLeft, Send, Loader2, Trash2, User, Bot,
   Check, RefreshCw, Download, Share2, Clock, RotateCcw,
   ImageIcon, Sparkles,
 } from "lucide-react";
+
 
 type AgentOutput = {
   id: string;
@@ -482,11 +484,17 @@ const AgentChat = () => {
                 <TabsTrigger value="history" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 pb-2 text-xs">
                   Histórico ({outputs.length})
                 </TabsTrigger>
+                {agentCode === "AT-GP" && (
+                  <TabsTrigger value="meta" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 pb-2 text-xs">
+                    📊 Meta Ads
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="shared" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 pb-2 text-xs">
                   <Share2 className="w-3 h-3 mr-1" /> Outros Agentes
                 </TabsTrigger>
               </TabsList>
             </div>
+
 
             <TabsContent value="current" className="flex-1 overflow-y-auto p-4 mt-0">
               {lastAssistantMsg ? (
@@ -606,6 +614,30 @@ const AgentChat = () => {
                 </div>
               )}
             </TabsContent>
+
+            {agentCode === "AT-GP" && projectId && (
+              <TabsContent value="meta" className="flex-1 overflow-y-auto p-4 mt-0">
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-display text-sm font-semibold mb-1">Conexão Meta Ads</h3>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Conecte sua conta para que o AT-GP acesse dados reais de campanhas e crie anúncios automaticamente.
+                    </p>
+                    <MetaAdsConnect projectId={projectId} />
+                  </div>
+                  <div className="glass rounded-xl p-4">
+                    <h4 className="text-xs font-semibold mb-2">📋 O AT-GP pode:</h4>
+                    <ul className="space-y-1.5 text-xs text-muted-foreground">
+                      <li className="flex items-start gap-2"><span className="text-green-400 mt-0.5">✓</span> Analisar métricas reais (CPL, ROAS, CTR, CPC)</li>
+                      <li className="flex items-start gap-2"><span className="text-green-400 mt-0.5">✓</span> Criar campanhas com status PAUSADO para revisão</li>
+                      <li className="flex items-start gap-2"><span className="text-green-400 mt-0.5">✓</span> Gerar demandas para AM-CC, AC-DC baseadas em dados</li>
+                      <li className="flex items-start gap-2"><span className="text-green-400 mt-0.5">✓</span> Identificar fadiga de criativo e oportunidades</li>
+                      <li className="flex items-start gap-2"><span className="text-yellow-400 mt-0.5">⚠</span> Campanhas sempre criadas como PAUSADAS — você ativa manualmente</li>
+                    </ul>
+                  </div>
+                </div>
+              </TabsContent>
+            )}
 
             <TabsContent value="shared" className="flex-1 overflow-y-auto p-4 mt-0">
               {allOutputs.filter(o => o.agent_name !== agentCode).length === 0 ? (

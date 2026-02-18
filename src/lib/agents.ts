@@ -1,4 +1,4 @@
-import { Users, Target, GitBranch, MessageCircle, PenTool, Palette, Brain } from "lucide-react";
+import { Users, Target, GitBranch, MessageCircle, PenTool, Palette, Brain, Megaphone } from "lucide-react";
 
 export const AGENTS_CONFIG = {
   "AA-D100": {
@@ -16,6 +16,7 @@ export const AGENTS_CONFIG = {
       "Identifique padrões comportamentais da minha audiência",
     ],
     outputTypes: ["Micro-Personas", "Dream 100", "Mapa Dores×Desejos", "Padrões Comportamentais"],
+    dependencies: [] as string[],
   },
   "AO-GO": {
     code: "AO-GO",
@@ -32,6 +33,7 @@ export const AGENTS_CONFIG = {
       "Defina a estratégia de pricing",
     ],
     outputTypes: ["Escada de Valor", "Equação de Valor", "Stack de Oferta", "Variações de Copy", "Pricing Strategy"],
+    dependencies: ["AA-D100"],
   },
   "AJ-AF": {
     code: "AJ-AF",
@@ -48,6 +50,7 @@ export const AGENTS_CONFIG = {
       "Desenhe meu funil de vendas completo",
     ],
     outputTypes: ["Mapa do Funil", "Sequência de Email", "Lead Scoring", "Gatilhos de Automação", "KPIs"],
+    dependencies: ["AA-D100", "AO-GO"],
   },
   "AE-C": {
     code: "AE-C",
@@ -64,6 +67,7 @@ export const AGENTS_CONFIG = {
       "Gere scripts para minha próxima live",
     ],
     outputTypes: ["Epiphany Bridge", "Fluxo de Conversa", "Qualificação BANT", "Script de Live", "Handling de Objeções"],
+    dependencies: ["AA-D100", "AO-GO", "AM-CC", "AJ-AF"],
   },
   "AM-CC": {
     code: "AM-CC",
@@ -80,6 +84,7 @@ export const AGENTS_CONFIG = {
       "Crie uma sequência de email de lançamento",
     ],
     outputTypes: ["Página de Vendas", "Sequência de Email", "Hooks Virais", "Script de VSL", "Headlines e CTAs"],
+    dependencies: ["AA-D100", "AO-GO"],
   },
   "AC-DC": {
     code: "AC-DC",
@@ -96,23 +101,66 @@ export const AGENTS_CONFIG = {
       "Sugira uma paleta de cores para meu nicho",
     ],
     outputTypes: ["Briefing Visual", "Prompts de IA", "Specs por Plataforma", "Paleta de Cores", "Guidelines de Marca"],
+    dependencies: ["AA-D100", "AO-GO", "AM-CC"],
+  },
+  "AT-GP": {
+    code: "AT-GP",
+    name: "Gestor de Tráfego",
+    fullName: "Gestor de Tráfego Pago",
+    description: "Planeja, cria e otimiza campanhas Meta Ads. Analisa dados reais e envia demandas aos outros agentes.",
+    color: "from-red-500 to-red-600",
+    icon: Megaphone,
+    greeting: "Olá! Sou o AT-GP, seu Gestor de Tráfego Pago. 📣\n\nVou planejar, criar e otimizar suas campanhas na Meta (Facebook e Instagram) com base nos outputs dos outros agentes.\n\nPara começar:\n1. **Qual é o objetivo principal da campanha?** (Gerar leads, vender produto, reconhecimento)\n2. **Qual é o orçamento disponível?** (diário ou mensal)\n3. **Você já tem uma conta de anúncios ativa?**",
+    suggestions: [
+      "Crie um plano de mídia completo",
+      "Defina a estrutura de campanha ideal",
+      "Configure públicos para topo, meio e fundo de funil",
+      "Gere anúncios com base nos criativos e copy aprovados",
+    ],
+    outputTypes: ["Plano de Mídia", "Estrutura de Campanha", "Configuração de Públicos", "Specs de Anúncios", "Relatório de Performance", "Demandas para Agentes"],
+    dependencies: ["AA-D100", "AO-GO", "AM-CC", "AC-DC"],
   },
   "ACO": {
     code: "ACO",
     name: "Orquestrador Central",
     fullName: "Orquestrador Central",
-    description: "Diagnóstico de coerência, gaps, plano de ação priorizado",
+    description: "Porta de entrada do projeto. Coleta a BIG IDEA, distribui tarefas e compila o plano completo.",
     color: "from-indigo-500 to-indigo-600",
     icon: Brain,
-    greeting: "Olá! Sou o ACO, seu Orquestrador Central. 🧠\n\nMinha missão é analisar todos os outputs dos outros agentes e garantir que sua estratégia seja coerente.\n\nVou verificar os outputs aprovados dos outros agentes e te dar um diagnóstico completo.\n\n**O que você gostaria que eu analisasse primeiro?**",
+    greeting: "Olá! Sou o ACO, seu Orquestrador Central. 🧠\n\nSou a porta de entrada do seu projeto. Você pode me descrever sua BIG IDEA e eu vou coordenar todos os agentes para criar um plano completo, ou pode conversar comigo para diagnósticos e análises.\n\n**O que você quer fazer hoje?**",
     suggestions: [
       "Faça um diagnóstico completo da minha estratégia",
       "Identifique gaps na minha estrutura",
       "Crie um plano de ação priorizado",
       "Qual a ordem ideal para usar os agentes?",
     ],
-    outputTypes: ["Diagnóstico de Coerência", "Gaps Identificados", "Plano de Ação", "Matriz de Dependências", "Score de Maturidade"],
+    outputTypes: ["Diagnóstico de Coerência", "Gaps Identificados", "Plano de Ação", "Matriz de Dependências", "Score de Maturidade", "Plano Completo do Negócio"],
+    dependencies: ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP"],
   },
 } as const;
 
 export type AgentCode = keyof typeof AGENTS_CONFIG;
+
+// Mapa de dependências para verificação de bloqueio
+export const AGENT_DEPENDENCIES: Record<string, string[]> = {
+  "AA-D100": [],
+  "AO-GO": ["AA-D100"],
+  "AJ-AF": ["AA-D100", "AO-GO"],
+  "AM-CC": ["AA-D100", "AO-GO"],
+  "AC-DC": ["AA-D100", "AO-GO", "AM-CC"],
+  "AE-C": ["AA-D100", "AO-GO", "AM-CC", "AJ-AF"],
+  "AT-GP": ["AA-D100", "AO-GO", "AM-CC", "AC-DC"],
+  "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP"],
+};
+
+// Ordem de execução no modo orquestrador
+export const ORCHESTRATOR_EXECUTION_ORDER = [
+  { agent: "AA-D100", label: "Analisando audiência e criando personas..." },
+  { agent: "AO-GO",  label: "Criando oferta Grand Slam..." },
+  { agent: "AJ-AF",  label: "Mapeando jornada do funil..." },
+  { agent: "AM-CC",  label: "Gerando copy e conteúdo estratégico..." },
+  { agent: "AC-DC",  label: "Definindo criativos visuais..." },
+  { agent: "AE-C",   label: "Criando scripts de vendas e engajamento..." },
+  { agent: "AT-GP",  label: "Planejando estratégia de tráfego pago..." },
+  { agent: "ACO",    label: "Compilando plano completo do negócio..." },
+] as const;
