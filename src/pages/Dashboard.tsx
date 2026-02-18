@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveProject } from "@/contexts/ActiveProjectContext";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { motion } from "framer-motion";
-import { ChevronRight, Lock } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronRight, Lock, PartyPopper, X } from "lucide-react";
 import { AGENTS_CONFIG } from "@/lib/agents";
+
 
 const AGENTS = Object.values(AGENTS_CONFIG);
 
@@ -26,9 +27,14 @@ const AGENT_DEPENDENCIES: Record<string, string[]> = {
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { activeProject } = useActiveProject();
   const [approvedAgents, setApprovedAgents] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [showCheckoutSuccess, setShowCheckoutSuccess] = useState(
+    searchParams.get("checkout") === "success"
+  );
+
 
   useEffect(() => {
     if (!activeProject?.id) {
@@ -60,12 +66,43 @@ const Dashboard = () => {
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-8">
+
+      {/* Checkout success banner */}
+      <AnimatePresence>
+        {showCheckoutSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -16 }}
+            className="flex items-center gap-3 rounded-xl px-5 py-4 bg-primary/10 border border-primary/30 text-foreground"
+          >
+            <PartyPopper className="w-5 h-5 text-primary shrink-0" />
+            <div className="flex-1">
+              <p className="font-semibold text-sm">Assinatura ativada com sucesso! 🎉</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Seu plano foi atualizado. Todos os agentes e recursos do seu plano já estão disponíveis.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setShowCheckoutSuccess(false);
+                setSearchParams({});
+              }}
+              className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Progress card */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="glass rounded-2xl p-6"
       >
+
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-display font-semibold">Progresso da Estrutura</h3>
           <span className="text-sm text-muted-foreground">
