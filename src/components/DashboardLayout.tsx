@@ -25,7 +25,12 @@ const DashboardLayout = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [profile, setProfile] = useState<{ name: string; plan: string } | null>(null);
+  const [profile, setProfile] = useState<{
+    name: string;
+    plan: string;
+    interactions_used: number;
+    interactions_limit: number;
+  } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const { projects, activeProject, setActiveProjectId } = useActiveProject();
@@ -33,9 +38,14 @@ const DashboardLayout = () => {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("profiles").select("name, plan").eq("user_id", user.id).single().then(({ data }) => {
-      if (data) setProfile(data);
-    });
+    supabase
+      .from("profiles")
+      .select("name, plan, interactions_used, interactions_limit")
+      .eq("user_id", user.id)
+      .single()
+      .then(({ data }) => {
+        if (data) setProfile(data as typeof profile);
+      });
     supabase.rpc("has_role", { _user_id: user.id, _role: "admin" }).then(({ data }) => {
       setIsAdmin(!!data);
     });
@@ -135,6 +145,20 @@ const DashboardLayout = () => {
             >
               <FolderOpen className="w-3.5 h-3.5" /> Criar projeto
             </button>
+          )}
+          {/* Usage indicator */}
+          {profile && (
+            <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{profile.interactions_used}/{profile.interactions_limit}</span>
+              <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, (profile.interactions_used / profile.interactions_limit) * 100)}%`,
+                  }}
+                />
+              </div>
+            </div>
           )}
           <span className="text-xs px-3 py-1 rounded-full bg-primary/10 text-primary font-medium capitalize">
             {profile?.plan || "starter"}

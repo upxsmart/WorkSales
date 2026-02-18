@@ -501,6 +501,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_profile_usage: {
+        Args: { _field: string; _user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
