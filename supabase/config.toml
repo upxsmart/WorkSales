@@ -9,3 +9,10 @@ verify_jwt = false
 [functions.admin-test-api]
 verify_jwt = false
 
+[functions.orchestrator-run]
+verify_jwt = false
+
+[functions.meta-ads-proxy]
+verify_jwt = false
+
+

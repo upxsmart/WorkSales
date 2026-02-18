@@ -14,6 +14,62 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_demands: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          data: Json | null
+          demand_type: string
+          from_agent: string
+          id: string
+          priority: string | null
+          project_id: string
+          reason: string
+          result: Json | null
+          status: string | null
+          suggestion: string | null
+          to_agent: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          data?: Json | null
+          demand_type: string
+          from_agent: string
+          id?: string
+          priority?: string | null
+          project_id: string
+          reason: string
+          result?: Json | null
+          status?: string | null
+          suggestion?: string | null
+          to_agent: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          data?: Json | null
+          demand_type?: string
+          from_agent?: string
+          id?: string
+          priority?: string | null
+          project_id?: string
+          reason?: string
+          result?: Json | null
+          status?: string | null
+          suggestion?: string | null
+          to_agent?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_demands_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agent_outputs: {
         Row: {
           agent_name: string
@@ -312,6 +368,212 @@ export type Database = {
         }
         Relationships: []
       }
+      meta_ads_actions: {
+        Row: {
+          action_type: string
+          created_at: string | null
+          error_message: string | null
+          executed_at: string | null
+          id: string
+          meta_object_id: string | null
+          project_id: string
+          request_payload: Json | null
+          response_payload: Json | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          created_at?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          meta_object_id?: string | null
+          project_id: string
+          request_payload?: Json | null
+          response_payload?: Json | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          created_at?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          meta_object_id?: string | null
+          project_id?: string
+          request_payload?: Json | null
+          response_payload?: Json | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_ads_actions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meta_ads_cache: {
+        Row: {
+          data: Json
+          data_type: string
+          expires_at: string | null
+          id: string
+          meta_object_id: string | null
+          project_id: string
+          synced_at: string | null
+        }
+        Insert: {
+          data?: Json
+          data_type: string
+          expires_at?: string | null
+          id?: string
+          meta_object_id?: string | null
+          project_id: string
+          synced_at?: string | null
+        }
+        Update: {
+          data?: Json
+          data_type?: string
+          expires_at?: string | null
+          id?: string
+          meta_object_id?: string | null
+          project_id?: string
+          synced_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_ads_cache_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meta_ads_connections: {
+        Row: {
+          access_token: string
+          ad_account_id: string
+          connection_status: string | null
+          created_at: string | null
+          id: string
+          instagram_account_id: string | null
+          last_sync_at: string | null
+          meta_app_id: string | null
+          page_id: string | null
+          pixel_id: string | null
+          project_id: string
+          token_expires_at: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_token?: string
+          ad_account_id?: string
+          connection_status?: string | null
+          created_at?: string | null
+          id?: string
+          instagram_account_id?: string | null
+          last_sync_at?: string | null
+          meta_app_id?: string | null
+          page_id?: string | null
+          pixel_id?: string | null
+          project_id: string
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          ad_account_id?: string
+          connection_status?: string | null
+          created_at?: string | null
+          id?: string
+          instagram_account_id?: string | null
+          last_sync_at?: string | null
+          meta_app_id?: string | null
+          page_id?: string | null
+          pixel_id?: string | null
+          project_id?: string
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meta_ads_connections_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orchestrator_runs: {
+        Row: {
+          agent_results: Json | null
+          big_idea: string
+          collected_data: Json | null
+          completed_at: string | null
+          created_at: string | null
+          current_step: number | null
+          id: string
+          master_plan: Json | null
+          project_id: string
+          started_at: string | null
+          status: string | null
+          total_cost_usd: number | null
+          total_steps: number | null
+          total_tokens: number | null
+        }
+        Insert: {
+          agent_results?: Json | null
+          big_idea: string
+          collected_data?: Json | null
+          completed_at?: string | null
+          created_at?: string | null
+          current_step?: number | null
+          id?: string
+          master_plan?: Json | null
+          project_id: string
+          started_at?: string | null
+          status?: string | null
+          total_cost_usd?: number | null
+          total_steps?: number | null
+          total_tokens?: number | null
+        }
+        Update: {
+          agent_results?: Json | null
+          big_idea?: string
+          collected_data?: Json | null
+          completed_at?: string | null
+          created_at?: string | null
+          current_step?: number | null
+          id?: string
+          master_plan?: Json | null
+          project_id?: string
+          started_at?: string | null
+          status?: string | null
+          total_cost_usd?: number | null
+          total_steps?: number | null
+          total_tokens?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orchestrator_runs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans_config: {
         Row: {
           created_at: string
@@ -322,6 +584,8 @@ export type Database = {
           interactions_limit: number
           is_active: boolean
           llm_model: string
+          meta_ads_enabled: boolean | null
+          meta_ads_syncs_per_day: number | null
           plan_code: string
           plan_name: string
           price_brl: number
@@ -337,6 +601,8 @@ export type Database = {
           interactions_limit?: number
           is_active?: boolean
           llm_model?: string
+          meta_ads_enabled?: boolean | null
+          meta_ads_syncs_per_day?: number | null
           plan_code: string
           plan_name: string
           price_brl?: number
@@ -352,6 +618,8 @@ export type Database = {
           interactions_limit?: number
           is_active?: boolean
           llm_model?: string
+          meta_ads_enabled?: boolean | null
+          meta_ads_syncs_per_day?: number | null
           plan_code?: string
           plan_name?: string
           price_brl?: number
@@ -416,14 +684,18 @@ export type Database = {
       }
       projects: {
         Row: {
+          big_idea: string | null
           created_at: string
           description: string | null
           faturamento: string | null
           has_product: boolean | null
           id: string
+          master_plan: Json | null
           name: string
           nicho: string | null
           objetivo: string | null
+          orchestrator_current_agent: string | null
+          orchestrator_status: string | null
           product_description: string | null
           progress: Json
           publico_alvo: string | null
@@ -432,14 +704,18 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          big_idea?: string | null
           created_at?: string
           description?: string | null
           faturamento?: string | null
           has_product?: boolean | null
           id?: string
+          master_plan?: Json | null
           name?: string
           nicho?: string | null
           objetivo?: string | null
+          orchestrator_current_agent?: string | null
+          orchestrator_status?: string | null
           product_description?: string | null
           progress?: Json
           publico_alvo?: string | null
@@ -448,14 +724,18 @@ export type Database = {
           user_id: string
         }
         Update: {
+          big_idea?: string | null
           created_at?: string
           description?: string | null
           faturamento?: string | null
           has_product?: boolean | null
           id?: string
+          master_plan?: Json | null
           name?: string
           nicho?: string | null
           objetivo?: string | null
+          orchestrator_current_agent?: string | null
+          orchestrator_status?: string | null
           product_description?: string | null
           progress?: Json
           publico_alvo?: string | null

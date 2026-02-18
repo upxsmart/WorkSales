@@ -12,10 +12,11 @@ const AGENT_DEPENDENCIES: Record<string, string[]> = {
   "AA-D100": [],
   "AO-GO": ["AA-D100"],
   "AJ-AF": ["AA-D100", "AO-GO"],
-  "AE-C": ["AA-D100", "AO-GO", "AM-CC"],
   "AM-CC": ["AA-D100", "AO-GO"],
   "AC-DC": ["AA-D100", "AO-GO", "AM-CC"],
-  "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC"],
+  "AE-C": ["AA-D100", "AO-GO", "AM-CC", "AJ-AF"],
+  "AT-GP": ["AA-D100", "AO-GO", "AM-CC", "AC-DC"],
+  "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP"],
 };
 
 const IMAGE_AGENT = "AC-DC";
