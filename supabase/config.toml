@@ -5,3 +5,7 @@ verify_jwt = false
 
 [functions.kb-import]
 verify_jwt = false
+
+[functions.admin-test-api]
+verify_jwt = false
+
