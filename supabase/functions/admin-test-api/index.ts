@@ -41,15 +41,70 @@ serve(async (req) => {
       });
     }
 
-    const { action, api } = await req.json();
+    const body = await req.json();
+    const { action, api, key_name, key_value } = body;
 
+    // ── Save key ─────────────────────────────────────────────────────
+    if (action === "save_key") {
+      if (!key_name || !key_value) {
+        return new Response(JSON.stringify({ error: "key_name e key_value são obrigatórios" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Validate key_name is one of the allowed keys
+      const ALLOWED_KEYS = ["ANTHROPIC_API_KEY", "STRIPE_SECRET_KEY", "RESEND_API_KEY"];
+      if (!ALLOWED_KEYS.includes(key_name)) {
+        return new Response(JSON.stringify({ error: "key_name inválido" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Validate key_value length
+      if (typeof key_value !== "string" || key_value.length < 8 || key_value.length > 500) {
+        return new Response(JSON.stringify({ error: "Valor da chave inválido (8-500 caracteres)" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { error: upsertErr } = await supabase
+        .from("api_configs")
+        .upsert({ key_name, key_value, is_active: true }, { onConflict: "key_name" });
+
+      if (upsertErr) {
+        console.error("save_key upsert error:", upsertErr);
+        return new Response(JSON.stringify({ error: "Erro ao salvar chave" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Test APIs ─────────────────────────────────────────────────────
     if (action === "test") {
+      // Fetch all keys from db
+      const { data: configRows } = await supabase
+        .from("api_configs")
+        .select("key_name, key_value, is_active");
+
+      const dbKeys: Record<string, string> = {};
+      for (const row of configRows || []) {
+        if (row.key_value) dbKeys[row.key_name] = row.key_value;
+      }
+
       const results: Record<string, { status: string; latency?: number; error?: string }> = {};
 
-      // Test Anthropic
+      // ── Anthropic ──────────────────────────────────────────────────
       if (!api || api === "anthropic") {
-        const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-        if (!anthropicKey) {
+        const key = dbKeys["ANTHROPIC_API_KEY"] || Deno.env.get("ANTHROPIC_API_KEY");
+        if (!key) {
           results.anthropic = { status: "missing", error: "ANTHROPIC_API_KEY não configurada" };
         } else {
           const start = Date.now();
@@ -57,7 +112,7 @@ serve(async (req) => {
             const res = await fetch("https://api.anthropic.com/v1/messages", {
               method: "POST",
               headers: {
-                "x-api-key": anthropicKey,
+                "x-api-key": key,
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
               },
@@ -69,9 +124,19 @@ serve(async (req) => {
             });
             const latency = Date.now() - start;
             if (res.ok) {
+              await res.text();
+              // Update last test status
+              await supabase.from("api_configs").update({
+                last_tested_at: new Date().toISOString(),
+                last_test_status: "ok",
+              }).eq("key_name", "ANTHROPIC_API_KEY");
               results.anthropic = { status: "ok", latency };
             } else {
               const err = await res.json();
+              await supabase.from("api_configs").update({
+                last_tested_at: new Date().toISOString(),
+                last_test_status: "error",
+              }).eq("key_name", "ANTHROPIC_API_KEY");
               results.anthropic = { status: "error", latency, error: err?.error?.message || `HTTP ${res.status}` };
             }
           } catch (e) {
@@ -80,11 +145,11 @@ serve(async (req) => {
         }
       }
 
-      // Test Lovable AI Gateway (Nano Banana / Gemini)
+      // ── Lovable AI Gateway ────────────────────────────────────────
       if (!api || api === "lovable_ai") {
         const lovableKey = Deno.env.get("LOVABLE_API_KEY");
         if (!lovableKey) {
-          results.lovable_ai = { status: "missing", error: "LOVABLE_API_KEY não configurada" };
+          results.lovable_ai = { status: "missing", error: "LOVABLE_API_KEY não configurada (gerenciada automaticamente)" };
         } else {
           const start = Date.now();
           try {
@@ -102,6 +167,7 @@ serve(async (req) => {
             });
             const latency = Date.now() - start;
             if (res.ok) {
+              await res.text();
               results.lovable_ai = { status: "ok", latency };
             } else {
               const body = await res.text();
@@ -113,18 +179,23 @@ serve(async (req) => {
         }
       }
 
-      // Test Stripe
+      // ── Stripe ────────────────────────────────────────────────────
       if (!api || api === "stripe") {
-        const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-        if (!stripeKey) {
+        const key = dbKeys["STRIPE_SECRET_KEY"] || Deno.env.get("STRIPE_SECRET_KEY");
+        if (!key) {
           results.stripe = { status: "missing", error: "STRIPE_SECRET_KEY não configurada" };
         } else {
           const start = Date.now();
           try {
             const res = await fetch("https://api.stripe.com/v1/balance", {
-              headers: { Authorization: `Bearer ${stripeKey}` },
+              headers: { Authorization: `Bearer ${key}` },
             });
             const latency = Date.now() - start;
+            await res.text();
+            await supabase.from("api_configs").update({
+              last_tested_at: new Date().toISOString(),
+              last_test_status: res.ok ? "ok" : "error",
+            }).eq("key_name", "STRIPE_SECRET_KEY");
             results.stripe = res.ok
               ? { status: "ok", latency }
               : { status: "error", latency, error: `HTTP ${res.status}` };
@@ -134,18 +205,23 @@ serve(async (req) => {
         }
       }
 
-      // Test Resend
+      // ── Resend ────────────────────────────────────────────────────
       if (!api || api === "resend") {
-        const resendKey = Deno.env.get("RESEND_API_KEY");
-        if (!resendKey) {
+        const key = dbKeys["RESEND_API_KEY"] || Deno.env.get("RESEND_API_KEY");
+        if (!key) {
           results.resend = { status: "missing", error: "RESEND_API_KEY não configurada" };
         } else {
           const start = Date.now();
           try {
             const res = await fetch("https://api.resend.com/domains", {
-              headers: { Authorization: `Bearer ${resendKey}` },
+              headers: { Authorization: `Bearer ${key}` },
             });
             const latency = Date.now() - start;
+            await res.text();
+            await supabase.from("api_configs").update({
+              last_tested_at: new Date().toISOString(),
+              last_test_status: res.ok ? "ok" : "error",
+            }).eq("key_name", "RESEND_API_KEY");
             results.resend = res.ok
               ? { status: "ok", latency }
               : { status: "error", latency, error: `HTTP ${res.status}` };

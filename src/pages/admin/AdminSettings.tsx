@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import AdminLayout from "@/components/admin/AdminLayout";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  Key, Shield, Bell, Settings2, CheckCircle2, XCircle,
-  Loader2, RefreshCw, Download, Trash2, Zap, Brain,
-  ChevronDown, ChevronUp, Save, AlertTriangle,
+  Key, Shield, Bell, Settings2, Brain,
+  Loader2, RefreshCw, Download, Trash2, Zap,
+  Save, AlertTriangle, XCircle, Eye, EyeOff,
+  CheckCircle2, Lock,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,17 +18,26 @@ import { toast } from "sonner";
 // ─── Types ───────────────────────────────────────────────
 type ApiStatus = "idle" | "testing" | "ok" | "error" | "missing";
 
-interface ApiKey {
+interface ApiKeyConfig {
   id: string;
   name: string;
-  secret_env: string;
+  key_name: string;
   description: string;
   docsUrl: string;
+  placeholder: string;
+  isAutomatic?: boolean;
+  // runtime state
   status: ApiStatus;
   latency?: number;
   errorMsg?: string;
-  newValue?: string;
-  showInput?: boolean;
+  hasValue: boolean;
+  maskedValue: string;
+  lastTestedAt?: string;
+  // editing
+  editing: boolean;
+  inputValue: string;
+  showInput: boolean;
+  saving: boolean;
 }
 
 interface PlanRow {
@@ -45,7 +55,7 @@ interface PlanRow {
 
 // ─── Constants ───────────────────────────────────────────
 const LLM_MODELS = [
-  { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash (Padrão)" },
+  { value: "google/gemini-3-flash-preview", label: "Gemini 3 Flash Preview (Padrão)" },
   { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash" },
   { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
   { value: "claude-haiku-4-5", label: "Claude Haiku 4.5 (Anthropic)" },
@@ -57,78 +67,154 @@ const IMAGE_MODELS = [
   { value: "google/gemini-3-pro-image-preview", label: "Gemini 3 Pro Image (Preview)" },
 ];
 
-const INITIAL_KEYS: ApiKey[] = [
+const INITIAL_KEYS: Omit<ApiKeyConfig, "status" | "hasValue" | "maskedValue" | "editing" | "inputValue" | "showInput" | "saving">[] = [
   {
     id: "anthropic",
     name: "Anthropic (Claude)",
-    secret_env: "ANTHROPIC_API_KEY",
-    description: "Modelos Claude para os agentes de texto",
+    key_name: "ANTHROPIC_API_KEY",
+    description: "Modelos Claude Haiku e Sonnet para os agentes de texto",
     docsUrl: "https://console.anthropic.com/settings/keys",
-    status: "idle",
+    placeholder: "sk-ant-api03-...",
   },
   {
     id: "lovable_ai",
-    name: "Lovable AI Gateway (Gemini / GPT)",
-    secret_env: "LOVABLE_API_KEY",
-    description: "Gateway Lovable para Gemini e modelos de imagem (Nano Banana)",
+    name: "Lovable AI Gateway",
+    key_name: "LOVABLE_API_KEY",
+    description: "Gemini e modelos de imagem (Nano Banana) — gerenciado automaticamente pelo Lovable",
     docsUrl: "https://docs.lovable.dev/features/ai",
-    status: "idle",
+    placeholder: "Automático",
+    isAutomatic: true,
   },
   {
     id: "stripe",
     name: "Stripe",
-    secret_env: "STRIPE_SECRET_KEY",
+    key_name: "STRIPE_SECRET_KEY",
     description: "Processamento de pagamentos e assinaturas",
     docsUrl: "https://dashboard.stripe.com/apikeys",
-    status: "idle",
+    placeholder: "sk_live_...",
   },
   {
     id: "resend",
     name: "Resend",
-    secret_env: "RESEND_API_KEY",
+    key_name: "RESEND_API_KEY",
     description: "Envio de emails transacionais",
     docsUrl: "https://resend.com/api-keys",
-    status: "idle",
+    placeholder: "re_...",
   },
 ];
 
-// ─── Component ───────────────────────────────────────────
+function maskKey(value: string): string {
+  if (!value || value.length < 8) return "••••••••";
+  return value.slice(0, 8) + "•".repeat(Math.min(value.length - 12, 16)) + value.slice(-4);
+}
+
+// ─── StatusBadge helper (plain function, not hook) ───────
+function StatusBadge({ status, latency }: { status: ApiStatus; latency?: number }) {
+  if (status === "testing") {
+    return (
+      <Badge variant="outline" className="gap-1 text-muted-foreground">
+        <Loader2 className="w-3 h-3 animate-spin" /> Testando...
+      </Badge>
+    );
+  }
+  if (status === "ok") {
+    return (
+      <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 gap-1">
+        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+        OK {latency ? `· ${latency}ms` : ""}
+      </Badge>
+    );
+  }
+  if (status === "missing") {
+    return (
+      <Badge variant="outline" className="border-amber-500/30 text-amber-400 gap-1">
+        <AlertTriangle className="w-3 h-3" /> Não configurada
+      </Badge>
+    );
+  }
+  if (status === "error") {
+    return (
+      <Badge variant="outline" className="border-destructive/40 text-destructive gap-1">
+        <XCircle className="w-3 h-3" /> Erro
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="border-border/40 text-muted-foreground gap-1">
+      <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/50" /> Não testada
+    </Badge>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────
 const AdminSettings = () => {
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>(INITIAL_KEYS);
+  const [apiKeys, setApiKeys] = useState<ApiKeyConfig[]>(
+    INITIAL_KEYS.map((k) => ({
+      ...k,
+      status: "idle",
+      hasValue: false,
+      maskedValue: "••••••••",
+      editing: false,
+      inputValue: "",
+      showInput: false,
+      saving: false,
+    }))
+  );
   const [testingAll, setTestingAll] = useState(false);
 
-  // Plans
   const [plans, setPlans] = useState<PlanRow[]>([]);
   const [savingPlan, setSavingPlan] = useState<string | null>(null);
 
-  // Alerts
   const [alerts, setAlerts] = useState({
-    costAlert: true,
-    newUser: true,
-    churnAlert: true,
-    weeklyReport: false,
+    costAlert: true, newUser: true, churnAlert: true, weeklyReport: false,
   });
   const [email, setEmail] = useState("admin@worksales.com.br");
   const [budget, setBudget] = useState("150");
 
-  // ─── Fetch plans ─────────────────────────────────────
+  // ─── Load existing key metadata (masked) ──────────────
   useEffect(() => {
+    loadKeyStatuses();
     fetchPlans();
   }, []);
 
-  const fetchPlans = async () => {
-    const { data } = await supabase.from("plans_config").select("*").order("price_brl");
-    if (data) setPlans(data as PlanRow[]);
+  const getToken = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token;
   };
 
-  // ─── Test APIs ───────────────────────────────────────
-  const testAll = async () => {
-    setTestingAll(true);
-    setApiKeys((prev) => prev.map((k) => ({ ...k, status: "testing" as ApiStatus })));
+  const loadKeyStatuses = async () => {
+    const { data } = await supabase
+      .from("api_configs")
+      .select("key_name, key_value, last_tested_at, last_test_status, is_active");
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
+    if (!data) return;
 
+    setApiKeys((prev) =>
+      prev.map((k) => {
+        const row = data.find((r) => r.key_name === k.key_name);
+        if (!row) return k;
+        const hasValue = !!row.key_value && row.key_value.length > 0;
+        return {
+          ...k,
+          hasValue,
+          maskedValue: hasValue ? maskKey(row.key_value) : "Não configurada",
+          status: row.last_test_status === "ok" ? "ok" :
+                  row.last_test_status === "error" ? "error" :
+                  hasValue ? "idle" : "missing",
+          lastTestedAt: row.last_tested_at || undefined,
+        };
+      })
+    );
+  };
+
+  // ─── Save a key ───────────────────────────────────────
+  const saveKey = async (keyId: string) => {
+    const k = apiKeys.find((x) => x.id === keyId);
+    if (!k || !k.inputValue.trim()) return;
+
+    setApiKeys((prev) => prev.map((x) => x.id === keyId ? { ...x, saving: true } : x));
+
+    const token = await getToken();
     try {
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-test-api`,
@@ -138,26 +224,67 @@ const AdminSettings = () => {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
+          body: JSON.stringify({
+            action: "save_key",
+            key_name: k.key_name,
+            key_value: k.inputValue.trim(),
+          }),
+        }
+      );
+      const json = await res.json();
+      if (json.success) {
+        toast.success(`${k.name} salva com sucesso!`);
+        setApiKeys((prev) =>
+          prev.map((x) =>
+            x.id === keyId
+              ? {
+                  ...x,
+                  saving: false,
+                  editing: false,
+                  inputValue: "",
+                  showInput: false,
+                  hasValue: true,
+                  maskedValue: maskKey(k.inputValue.trim()),
+                  status: "idle",
+                }
+              : x
+          )
+        );
+      } else {
+        toast.error(json.error || "Erro ao salvar chave");
+        setApiKeys((prev) => prev.map((x) => x.id === keyId ? { ...x, saving: false } : x));
+      }
+    } catch {
+      toast.error("Erro de conexão ao salvar chave");
+      setApiKeys((prev) => prev.map((x) => x.id === keyId ? { ...x, saving: false } : x));
+    }
+  };
+
+  // ─── Test all APIs ────────────────────────────────────
+  const testAll = async () => {
+    setTestingAll(true);
+    setApiKeys((prev) => prev.map((k) => ({ ...k, status: "testing" as ApiStatus })));
+    const token = await getToken();
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-test-api`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({ action: "test" }),
         }
       );
       const json = await res.json();
       const results = json.results ?? {};
-
       setApiKeys((prev) =>
         prev.map((k) => {
           const r = results[k.id];
-          if (!r) return k;
-          return {
-            ...k,
-            status: r.status as ApiStatus,
-            latency: r.latency,
-            errorMsg: r.error,
-          };
+          if (!r) return { ...k, status: "idle" as ApiStatus };
+          return { ...k, status: r.status as ApiStatus, latency: r.latency, errorMsg: r.error };
         })
       );
-      toast.success("Teste de APIs concluído");
-    } catch (e) {
+      toast.success("Teste concluído");
+    } catch {
       toast.error("Erro ao testar APIs");
       setApiKeys((prev) => prev.map((k) => ({ ...k, status: "idle" })));
     } finally {
@@ -165,101 +292,65 @@ const AdminSettings = () => {
     }
   };
 
-  const testSingle = async (id: string) => {
-    setApiKeys((prev) => prev.map((k) => k.id === id ? { ...k, status: "testing" } : k));
-
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-
+  const testSingle = async (keyId: string) => {
+    const k = apiKeys.find((x) => x.id === keyId);
+    if (!k) return;
+    setApiKeys((prev) => prev.map((x) => x.id === keyId ? { ...x, status: "testing" } : x));
+    const token = await getToken();
     try {
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-test-api`,
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ action: "test", api: id }),
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "test", api: keyId }),
         }
       );
       const json = await res.json();
-      const r = json.results?.[id];
+      const r = json.results?.[keyId];
       if (r) {
         setApiKeys((prev) =>
-          prev.map((k) =>
-            k.id === id
-              ? { ...k, status: r.status as ApiStatus, latency: r.latency, errorMsg: r.error }
-              : k
+          prev.map((x) => x.id === keyId
+            ? { ...x, status: r.status as ApiStatus, latency: r.latency, errorMsg: r.error }
+            : x
           )
         );
-        if (r.status === "ok") toast.success(`${id}: conexão OK (${r.latency}ms)`);
-        else if (r.status === "missing") toast.warning(`${id}: chave não configurada`);
-        else toast.error(`${id}: ${r.error}`);
+        if (r.status === "ok") toast.success(`${k.name}: OK (${r.latency}ms)`);
+        else if (r.status === "missing") toast.warning(`${k.name}: chave não configurada`);
+        else toast.error(`${k.name}: ${r.error}`);
       }
-    } catch (e) {
-      setApiKeys((prev) => prev.map((k) => k.id === id ? { ...k, status: "error", errorMsg: String(e) } : k));
+    } catch {
+      setApiKeys((prev) => prev.map((x) => x.id === keyId ? { ...x, status: "error" } : x));
     }
   };
 
-  // ─── Plan update ─────────────────────────────────────
+  // ─── Plans ────────────────────────────────────────────
+  const fetchPlans = async () => {
+    const { data } = await supabase.from("plans_config").select("*").order("price_brl");
+    if (data) setPlans(data as PlanRow[]);
+  };
+
   const updatePlanField = (planId: string, field: keyof PlanRow, value: unknown) => {
-    setPlans((prev) =>
-      prev.map((p) => (p.id === planId ? { ...p, [field]: value } : p))
-    );
+    setPlans((prev) => prev.map((p) => (p.id === planId ? { ...p, [field]: value } : p)));
   };
 
   const savePlan = async (plan: PlanRow) => {
     setSavingPlan(plan.id);
-    const { error } = await supabase
-      .from("plans_config")
-      .update({
-        interactions_limit: plan.interactions_limit,
-        creatives_limit: plan.creatives_limit,
-        projects_limit: plan.projects_limit,
-        price_brl: plan.price_brl,
-        llm_model: plan.llm_model,
-        image_model: plan.image_model,
-        is_active: plan.is_active,
-      })
-      .eq("id", plan.id);
-
+    const { error } = await supabase.from("plans_config").update({
+      interactions_limit: plan.interactions_limit,
+      creatives_limit: plan.creatives_limit,
+      projects_limit: plan.projects_limit,
+      price_brl: plan.price_brl,
+      llm_model: plan.llm_model,
+      image_model: plan.image_model,
+      is_active: plan.is_active,
+    }).eq("id", plan.id);
     setSavingPlan(null);
     if (error) toast.error("Erro ao salvar plano");
     else toast.success(`Plano ${plan.plan_name} atualizado!`);
   };
 
-  // ─── Status badge helper ──────────────────────────────
-  const StatusBadge = ({ status, latency, error }: { status: ApiStatus; latency?: number; error?: string }) => {
-    if (status === "testing") return (
-      <Badge variant="outline" className="gap-1 text-muted-foreground">
-        <Loader2 className="w-3 h-3 animate-spin" /> Testando...
-      </Badge>
-    );
-    if (status === "ok") return (
-      <Badge variant="outline" className="border-emerald-500/30 text-emerald-400 gap-1">
-        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-        Ativo {latency ? `· ${latency}ms` : ""}
-      </Badge>
-    );
-    if (status === "missing") return (
-      <Badge variant="outline" className="border-amber-500/30 text-amber-400 gap-1">
-        <AlertTriangle className="w-3 h-3" /> Não configurada
-      </Badge>
-    );
-    if (status === "error") return (
-      <Badge variant="outline" className="border-red-500/30 text-red-400 gap-1">
-        <XCircle className="w-3 h-3" /> Erro
-      </Badge>
-    );
-    return (
-      <Badge variant="outline" className="border-border/50 text-muted-foreground gap-1">
-        <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground" /> Não testada
-      </Badge>
-    );
-  };
-
-  // ─── Render ──────────────────────────────────────────
+  // ─── Render ───────────────────────────────────────────
   return (
     <AdminLayout>
       <div className="space-y-6 max-w-4xl">
@@ -269,56 +360,76 @@ const AdminSettings = () => {
         </div>
 
         {/* ── API Keys ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass rounded-xl p-6"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass rounded-xl p-6">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <Key className="w-5 h-5 text-primary" />
               <h3 className="font-display font-semibold">API Keys</h3>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={testAll}
-              disabled={testingAll}
-              className="gap-2 text-xs"
-            >
+            <Button size="sm" variant="outline" onClick={testAll} disabled={testingAll} className="gap-2 text-xs">
               {testingAll ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
               Testar Todas
             </Button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {apiKeys.map((k) => (
-              <div key={k.id} className="border border-border/30 rounded-xl p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1">
+              <div key={k.id} className="border border-border/30 rounded-xl overflow-hidden">
+                {/* Header row */}
+                <div className="flex items-center gap-3 p-4">
+                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium">{k.name}</p>
-                      <StatusBadge status={k.status} latency={k.latency} error={k.errorMsg} />
+                      <span className="text-sm font-medium">{k.name}</span>
+                      {k.isAutomatic && (
+                        <Badge variant="outline" className="text-[10px] border-primary/30 text-primary gap-1">
+                          <Lock className="w-2.5 h-2.5" /> Automático
+                        </Badge>
+                      )}
+                      <StatusBadge status={k.status} latency={k.latency} />
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">{k.description}</p>
-                    {k.status === "error" && k.errorMsg && (
-                      <p className="text-xs text-red-400 mt-1 font-mono">{k.errorMsg}</p>
+
+                    {/* Masked value */}
+                    {!k.isAutomatic && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-xs font-mono text-muted-foreground bg-secondary px-2 py-1 rounded">
+                          {k.maskedValue}
+                        </span>
+                        {k.lastTestedAt && (
+                          <span className="text-[10px] text-muted-foreground">
+                            Testada em {new Date(k.lastTestedAt).toLocaleDateString("pt-BR")}
+                          </span>
+                        )}
+                      </div>
                     )}
-                    {k.status === "missing" && (
-                      <p className="text-xs text-amber-400 mt-1">
-                        Configure a variável <span className="font-mono bg-secondary px-1 py-0.5 rounded">{k.secret_env}</span> nos{" "}
-                        <a
-                          href={`https://supabase.com/dashboard/project/${import.meta.env.VITE_SUPABASE_PROJECT_ID}/settings/functions`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="underline"
-                        >
-                          segredos do Supabase
-                        </a>
-                      </p>
+
+                    {/* Error message */}
+                    {k.status === "error" && k.errorMsg && (
+                      <p className="text-xs text-destructive mt-1 font-mono">{k.errorMsg}</p>
                     )}
                   </div>
+
+                  {/* Action buttons */}
                   <div className="flex items-center gap-2 shrink-0">
+                    {!k.isAutomatic && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-8 gap-1.5"
+                        onClick={() =>
+                          setApiKeys((prev) =>
+                            prev.map((x) =>
+                              x.id === k.id
+                                ? { ...x, editing: !x.editing, inputValue: "", showInput: false }
+                                : x
+                            )
+                          )
+                        }
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        {k.hasValue ? "Rotacionar" : "Configurar"}
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -326,11 +437,7 @@ const AdminSettings = () => {
                       onClick={() => testSingle(k.id)}
                       disabled={k.status === "testing"}
                     >
-                      {k.status === "testing" ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-3 h-3" />
-                      )}
+                      {k.status === "testing" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
                       <span className="ml-1">Testar</span>
                     </Button>
                     <a
@@ -343,29 +450,73 @@ const AdminSettings = () => {
                     </a>
                   </div>
                 </div>
-                {/* Env var label */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-muted-foreground bg-secondary px-2 py-1 rounded">
-                    {k.secret_env}
-                  </span>
-                  <span className="text-xs text-muted-foreground">→ Supabase Secret</span>
-                </div>
+
+                {/* Edit form */}
+                <AnimatePresence>
+                  {k.editing && !k.isAutomatic && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="border-t border-border/30 bg-secondary/20 px-4 py-3"
+                    >
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Digite a nova chave para <span className="font-mono text-foreground">{k.key_name}</span>. O valor anterior será substituído.
+                      </p>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Input
+                            type={k.showInput ? "text" : "password"}
+                            placeholder={k.placeholder}
+                            value={k.inputValue}
+                            onChange={(e) =>
+                              setApiKeys((prev) =>
+                                prev.map((x) => x.id === k.id ? { ...x, inputValue: e.target.value } : x)
+                              )
+                            }
+                            className="pr-9 font-mono text-sm bg-background"
+                            autoComplete="off"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setApiKeys((prev) =>
+                                prev.map((x) => x.id === k.id ? { ...x, showInput: !x.showInput } : x)
+                              )
+                            }
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {k.showInput ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => saveKey(k.id)}
+                          disabled={!k.inputValue.trim() || k.saving}
+                          className="gap-1.5 gradient-primary text-primary-foreground"
+                        >
+                          {k.saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                          Salvar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setApiKeys((prev) =>
+                              prev.map((x) => x.id === k.id ? { ...x, editing: false, inputValue: "" } : x)
+                            )
+                          }
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             ))}
           </div>
-
-          <p className="text-xs text-muted-foreground mt-4 p-3 rounded-lg bg-secondary/30 border border-border/20">
-            💡 Para cadastrar ou rotacionar chaves, acesse{" "}
-            <a
-              href={`https://supabase.com/dashboard/project/${import.meta.env.VITE_SUPABASE_PROJECT_ID}/settings/functions`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary underline"
-            >
-              Supabase → Edge Functions → Secrets
-            </a>{" "}
-            e insira o valor correspondente a cada variável acima.
-          </p>
         </motion.div>
 
         {/* ── Modelos por Plano ── */}
@@ -387,26 +538,20 @@ const AdminSettings = () => {
               {plans.map((plan) => (
                 <div
                   key={plan.id}
-                  className={`border rounded-xl p-5 space-y-4 transition-all ${
-                    plan.plan_code === "starter"
-                      ? "border-cyan-500/20"
-                      : plan.plan_code === "professional"
-                      ? "border-primary/30"
-                      : "border-accent/30"
+                  className={`border rounded-xl p-5 space-y-4 ${
+                    plan.plan_code === "starter" ? "border-cyan-500/20" :
+                    plan.plan_code === "professional" ? "border-primary/30" : "border-accent/30"
                   }`}
                 >
-                  {/* Plan header */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <h4 className="font-display font-semibold">{plan.plan_name}</h4>
                       <Badge
                         variant="outline"
                         className={
-                          plan.plan_code === "starter"
-                            ? "border-cyan-500/30 text-cyan-400"
-                            : plan.plan_code === "professional"
-                            ? "border-primary/40 text-primary"
-                            : "border-accent/40 text-accent"
+                          plan.plan_code === "starter" ? "border-cyan-500/30 text-cyan-400" :
+                          plan.plan_code === "professional" ? "border-primary/40 text-primary" :
+                          "border-accent/40 text-accent"
                         }
                       >
                         {plan.plan_code}
@@ -415,10 +560,7 @@ const AdminSettings = () => {
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-2">
                         <Label className="text-xs text-muted-foreground">Ativo</Label>
-                        <Switch
-                          checked={plan.is_active}
-                          onCheckedChange={(v) => updatePlanField(plan.id, "is_active", v)}
-                        />
+                        <Switch checked={plan.is_active} onCheckedChange={(v) => updatePlanField(plan.id, "is_active", v)} />
                       </div>
                       <Button
                         size="sm"
@@ -426,57 +568,31 @@ const AdminSettings = () => {
                         disabled={savingPlan === plan.id}
                         className="gap-1.5 text-xs gradient-primary text-primary-foreground"
                       >
-                        {savingPlan === plan.id ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Save className="w-3 h-3" />
-                        )}
+                        {savingPlan === plan.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
                         Salvar
                       </Button>
                     </div>
                   </div>
 
-                  {/* Fields grid */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Preço (R$)</Label>
-                      <Input
-                        type="number"
-                        value={plan.price_brl}
-                        onChange={(e) => updatePlanField(plan.id, "price_brl", Number(e.target.value))}
-                        className="mt-1 h-8 text-sm bg-secondary/50"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Interações/mês</Label>
-                      <Input
-                        type="number"
-                        value={plan.interactions_limit}
-                        onChange={(e) => updatePlanField(plan.id, "interactions_limit", Number(e.target.value))}
-                        className="mt-1 h-8 text-sm bg-secondary/50"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Criativos/mês</Label>
-                      <Input
-                        type="number"
-                        value={plan.creatives_limit}
-                        onChange={(e) => updatePlanField(plan.id, "creatives_limit", Number(e.target.value))}
-                        className="mt-1 h-8 text-sm bg-secondary/50"
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Projetos</Label>
-                      <Input
-                        type="number"
-                        value={plan.projects_limit}
-                        onChange={(e) => updatePlanField(plan.id, "projects_limit", Number(e.target.value))}
-                        className="mt-1 h-8 text-sm bg-secondary/50"
-                      />
-                    </div>
+                    {[
+                      { label: "Preço (R$)", field: "price_brl" as keyof PlanRow },
+                      { label: "Interações/mês", field: "interactions_limit" as keyof PlanRow },
+                      { label: "Criativos/mês", field: "creatives_limit" as keyof PlanRow },
+                      { label: "Projetos", field: "projects_limit" as keyof PlanRow },
+                    ].map(({ label, field }) => (
+                      <div key={field}>
+                        <Label className="text-xs text-muted-foreground">{label}</Label>
+                        <Input
+                          type="number"
+                          value={plan[field] as number}
+                          onChange={(e) => updatePlanField(plan.id, field, Number(e.target.value))}
+                          className="mt-1 h-8 text-sm bg-secondary/50"
+                        />
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Model selects */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <Label className="text-xs text-muted-foreground">Modelo LLM (texto)</Label>
@@ -486,9 +602,7 @@ const AdminSettings = () => {
                         className="mt-1 w-full h-9 rounded-md border border-input bg-secondary/50 px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         {LLM_MODELS.map((m) => (
-                          <option key={m.value} value={m.value} className="bg-background">
-                            {m.label}
-                          </option>
+                          <option key={m.value} value={m.value} className="bg-background">{m.label}</option>
                         ))}
                       </select>
                     </div>
@@ -500,9 +614,7 @@ const AdminSettings = () => {
                         className="mt-1 w-full h-9 rounded-md border border-input bg-secondary/50 px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                       >
                         {IMAGE_MODELS.map((m) => (
-                          <option key={m.value} value={m.value} className="bg-background">
-                            {m.label}
-                          </option>
+                          <option key={m.value} value={m.value} className="bg-background">{m.label}</option>
                         ))}
                       </select>
                     </div>
@@ -577,7 +689,7 @@ const AdminSettings = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Última atualização</span>
-              <span>18 fev 2026, 14:00</span>
+              <span>18 fev 2026</span>
             </div>
             <div className="flex gap-3 pt-3 border-t border-border/30">
               <Button variant="outline" size="sm" className="gap-2">
