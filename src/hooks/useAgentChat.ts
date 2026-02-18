@@ -67,7 +67,8 @@ export function useAgentChat() {
       agentName: string,
       projectId?: string,
       projectContext?: Record<string, unknown>,
-      onDemandsFound?: (demands: AgentDemand[], fullText: string) => void
+      onDemandsFound?: (demands: AgentDemand[], fullText: string) => void,
+      imageCount?: number
     ) => {
       const userMsg: Message = { role: "user", content: input };
       const allMessages = [...messages, userMsg];
@@ -86,6 +87,7 @@ export function useAgentChat() {
             agentName,
             projectId,
             projectContext,
+            imageCount: imageCount ?? 1,
           }),
         });
 
