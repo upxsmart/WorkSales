@@ -40,7 +40,7 @@ function outputToText(out: { title?: string; output_type?: string; output_data: 
 }
 
 const IMAGE_AGENT = "AC-DC";
-const IMAGE_MODEL = "google/gemini-2.5-flash-image";
+const IMAGE_MODEL = "google/gemini-3-pro-image-preview";
 const TEXT_MODEL = "google/gemini-3-flash-preview";
 
 // Plan interaction limits (fallback if plans_config unavailable)
