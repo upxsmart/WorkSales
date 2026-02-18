@@ -7,7 +7,54 @@ export type Message = {
   images?: string[]; // public URLs for generated images (AC-DC)
 };
 
+export type AgentDemand = {
+  agent_target: string;
+  reason: string;
+  suggestion: string;
+  priority?: string;
+  demand_type?: string;
+};
+
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/agent-chat`;
+
+/**
+ * Extrai blocos de demanda JSON do texto de resposta do AT-GP.
+ * Aceita ```json { ... } ``` ou JSON inline com agent_target.
+ */
+export function extractDemands(text: string): AgentDemand[] {
+  const demands: AgentDemand[] = [];
+
+  // Pattern 1: ```json ... ``` blocks
+  const codeBlockRegex = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/g;
+  let match: RegExpExecArray | null;
+  while ((match = codeBlockRegex.exec(text)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed.agent_target && parsed.reason) {
+        demands.push(parsed as AgentDemand);
+      }
+      // Array of demands inside a single block
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item.agent_target && item.reason) demands.push(item as AgentDemand);
+        }
+      }
+    } catch { /* ignore malformed */ }
+  }
+
+  // Pattern 2: Inline JSON objects with agent_target key (not already found)
+  if (demands.length === 0) {
+    const inlineRegex = /\{\s*"agent_target"\s*:[\s\S]*?\}/g;
+    while ((match = inlineRegex.exec(text)) !== null) {
+      try {
+        const parsed = JSON.parse(match[0]);
+        if (parsed.agent_target && parsed.reason) demands.push(parsed as AgentDemand);
+      } catch { /* ignore */ }
+    }
+  }
+
+  return demands;
+}
 
 export function useAgentChat() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -19,7 +66,8 @@ export function useAgentChat() {
       input: string,
       agentName: string,
       projectId?: string,
-      projectContext?: Record<string, unknown>
+      projectContext?: Record<string, unknown>,
+      onDemandsFound?: (demands: AgentDemand[], fullText: string) => void
     ) => {
       const userMsg: Message = { role: "user", content: input };
       const allMessages = [...messages, userMsg];
@@ -139,6 +187,14 @@ export function useAgentChat() {
             } catch { /* ignore */ }
           }
         }
+
+        // ── After stream: detect demands (AT-GP only) ──────────────
+        if (agentName === "AT-GP" && onDemandsFound && assistantSoFar) {
+          const found = extractDemands(assistantSoFar);
+          if (found.length > 0) {
+            onDemandsFound(found, assistantSoFar);
+          }
+        }
       } catch (e) {
         console.error(e);
         toast({ title: "Erro", description: "Não foi possível obter resposta da IA.", variant: "destructive" });
@@ -153,3 +209,4 @@ export function useAgentChat() {
 
   return { messages, isLoading, sendMessage, clearMessages, setMessages };
 }
+

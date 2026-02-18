@@ -318,7 +318,31 @@ serve(async (req) => {
       // Tokens extras do AT-GP que não vêm de agentes
       tokenValues["{{META_ADS_DATA}}"] = "[Nenhum dado de Meta Ads conectado. Peça ao usuário para conectar a conta na aba de integrações.]";
     }
-    tokenValues["{{DEMANDAS}}"] = "[Nenhuma demanda pendente no momento.]";
+    // ── 3c. {{DEMANDAS}} — demandas pendentes de/para AT-GP ─────────
+    if (agentName === "AT-GP" && projectId) {
+      const { data: demands } = await supabase
+        .from("agent_demands")
+        .select("from_agent, to_agent, demand_type, reason, suggestion, priority, status, created_at")
+        .eq("project_id", projectId)
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (demands && demands.length > 0) {
+        let demandasText = `DEMANDAS PENDENTES (${demands.length}):\n`;
+        for (const d of demands) {
+          demandasText += `\n- [${d.priority?.toUpperCase() || "MEDIUM"}] De ${d.from_agent} → ${d.to_agent}`;
+          demandasText += `\n  Tipo: ${d.demand_type} | Razão: ${d.reason}`;
+          if (d.suggestion) demandasText += `\n  Sugestão: ${d.suggestion}`;
+        }
+        tokenValues["{{DEMANDAS}}"] = demandasText;
+      } else {
+        tokenValues["{{DEMANDAS}}"] = "[Nenhuma demanda pendente no momento.]";
+      }
+    } else {
+      tokenValues["{{DEMANDAS}}"] = "[Nenhuma demanda pendente no momento.]";
+    }
+
 
     // ── 4. Build project context note ─────────────────────────────
     const projectInfo = projectContext
