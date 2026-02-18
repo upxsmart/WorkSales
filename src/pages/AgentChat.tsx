@@ -77,8 +77,10 @@ const AgentChat = () => {
   const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // AC-DC: creative format selector
+  // AC-DC / AG-IMG: creative format selector
   const [selectedFormat, setSelectedFormat] = useState<CreativeFormat>(CREATIVE_FORMATS[1]);
+  // AG-IMG: number of image variations to generate at once
+  const [imageCount, setImageCount] = useState<1 | 2 | 4>(1);
 
   const agent = agentCode && agentCode in AGENTS_CONFIG
     ? AGENTS_CONFIG[agentCode as AgentCode]
@@ -210,7 +212,8 @@ const AgentChat = () => {
       agentCode,
       projectId || undefined,
       project || undefined,
-      agentCode === "AT-GP" ? handleDemandsFound : undefined
+      agentCode === "AT-GP" ? handleDemandsFound : undefined,
+      isImageAgent ? imageCount : undefined
     );
     setInput("");
   };
@@ -542,34 +545,66 @@ const AgentChat = () => {
           {/* Input */}
           <div className="border-t border-border bg-background/80 backdrop-blur-xl px-4 py-3">
             <div className="max-w-3xl mx-auto space-y-2">
-              {/* Format selector — image agents only */}
+              {/* Format + Variations selector — image agents only */}
               {(agentCode === "AC-DC" || agentCode === "AG-IMG") && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground shrink-0">Formato:</span>
-                  <div className="flex gap-1.5">
-                    {CREATIVE_FORMATS.map((fmt) => (
-                      <button
-                        key={fmt.id}
-                        onClick={() => setSelectedFormat(fmt)}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
-                          selectedFormat.id === fmt.id
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                        }`}
-                      >
-                        {/* Tiny aspect ratio preview */}
-                        <span className={`inline-block border border-current rounded-sm ${
-                          fmt.id === "story" ? "w-2 h-3.5"
-                          : fmt.id === "feed-square" ? "w-3 h-3"
-                          : fmt.id === "feed-portrait" ? "w-2.5 h-3"
-                          : "w-4 h-2.5"
-                        }`} />
-                        {fmt.label}
-                        <span className="opacity-60">{fmt.ratio}</span>
-                      </button>
-                    ))}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Format picker */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground shrink-0">Formato:</span>
+                    <div className="flex gap-1.5">
+                      {CREATIVE_FORMATS.map((fmt) => (
+                        <button
+                          key={fmt.id}
+                          onClick={() => setSelectedFormat(fmt)}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+                            selectedFormat.id === fmt.id
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                          }`}
+                        >
+                          <span className={`inline-block border border-current rounded-sm ${
+                            fmt.id === "story" ? "w-2 h-3.5"
+                            : fmt.id === "feed-square" ? "w-3 h-3"
+                            : fmt.id === "feed-portrait" ? "w-2.5 h-3"
+                            : "w-4 h-2.5"
+                          }`} />
+                          {fmt.label}
+                          <span className="opacity-60">{fmt.ratio}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-xs text-muted-foreground hidden sm:block">{selectedFormat.dimensions}</span>
                   </div>
-                  <span className="text-xs text-muted-foreground ml-1 hidden sm:block">{selectedFormat.dimensions}</span>
+
+                  {/* Divider */}
+                  <div className="h-4 w-px bg-border hidden sm:block" />
+
+                  {/* Variations picker — AG-IMG only */}
+                  {agentCode === "AG-IMG" && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground shrink-0">Variações:</span>
+                      <div className="flex gap-1">
+                        {([1, 2, 4] as const).map((n) => (
+                          <button
+                            key={n}
+                            onClick={() => setImageCount(n)}
+                            className={`w-8 h-7 rounded-lg border text-xs font-semibold transition-colors ${
+                              imageCount === n
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                            }`}
+                          >
+                            {n}×
+                          </button>
+                        ))}
+                      </div>
+                      {imageCount > 1 && (
+                        <span className="text-xs text-muted-foreground hidden sm:block">
+                          {imageCount} criativos serão gerados em paralelo
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               <div className="flex gap-3">

@@ -159,7 +159,8 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, agentName, projectId, projectContext } = await req.json();
+    const { messages, agentName, projectId, projectContext, imageCount } = await req.json();
+    const numImages = Math.min(Math.max(Number(imageCount) || 1, 1), 4); // clamp 1-4
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
@@ -386,32 +387,31 @@ serve(async (req) => {
         },
       ];
 
-      console.log(`${agentName}: generating image for: ${lastUserMessage.content.slice(0, 100)}`);
+      console.log(`${agentName}: generating ${numImages} image(s) for: ${lastUserMessage.content.slice(0, 100)}`);
 
       const imageAbort = new AbortController();
       const imageTimeout = setTimeout(() => imageAbort.abort(), 55000);
 
-      // Always use Lovable AI Gateway for image generation (Nano Banana)
-      console.log(`${agentName}: generating image via Lovable AI Gateway (${IMAGE_MODEL})`);
+      // Fire N requests in parallel (one per variation)
+      const requests = Array.from({ length: numImages }, () =>
+        fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: IMAGE_MODEL,
+            messages: imageMessages,
+            modalities: ["image", "text"],
+          }),
+          signal: imageAbort.signal,
+        })
+      );
 
-      let imageResponse: Response;
+      let responses: Response[];
       try {
-        imageResponse = await fetch(
-          "https://ai.gateway.lovable.dev/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: IMAGE_MODEL,
-              messages: imageMessages,
-              modalities: ["image", "text"],
-            }),
-            signal: imageAbort.signal,
-          }
-        );
+        responses = await Promise.all(requests);
       } catch (fetchErr) {
         clearTimeout(imageTimeout);
         const isTimeout = fetchErr instanceof Error && fetchErr.name === "AbortError";
@@ -426,57 +426,61 @@ serve(async (req) => {
       }
       clearTimeout(imageTimeout);
 
-      if (!imageResponse.ok) {
-        if (imageResponse.status === 429) {
+      // Check for errors in any response (use first error found)
+      for (const r of responses) {
+        if (!r.ok) {
+          if (r.status === 429) {
+            return new Response(
+              JSON.stringify({ error: "Limite de requisições excedido. Tente novamente." }),
+              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          if (r.status === 402) {
+            return new Response(
+              JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }),
+              { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          const errText = await r.text();
+          console.error("Image API error:", r.status, errText);
           return new Response(
-            JSON.stringify({ error: "Limite de requisições excedido. Tente novamente." }),
-            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ error: "Erro ao gerar imagem" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        if (imageResponse.status === 402) {
-          return new Response(
-            JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }),
-            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-        const errText = await imageResponse.text();
-        console.error("Image API error:", imageResponse.status, errText);
-        return new Response(
-          JSON.stringify({ error: "Erro ao gerar imagem" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
       }
 
-      const imageData = await imageResponse.json();
-
-      // Parse Lovable Gateway response format:
-      // choices[0].message.content + choices[0].message.images[].image_url.url
+      // Parse all responses
       let textContent = "";
       const imageUrls: string[] = [];
 
-      const choice = imageData.choices?.[0]?.message;
-      textContent = choice?.content || "";
-      const gatewayImages: Array<{ image_url: { url: string } }> = choice?.images || [];
-      for (const img of gatewayImages) {
-        const rawUrl = img.image_url?.url || "";
-        if (rawUrl) {
-          const publicUrl = await uploadImageToStorage(supabase, rawUrl, agentName, projectId);
-          if (publicUrl) imageUrls.push(publicUrl);
-          else imageUrls.push(rawUrl); // fallback: use base64 directly if storage upload fails
+      for (const r of responses) {
+        const imageData = await r.json();
+        const choice = imageData.choices?.[0]?.message;
+        if (!textContent && choice?.content) textContent = choice.content;
+        const gatewayImages: Array<{ image_url: { url: string } }> = choice?.images || [];
+        for (const img of gatewayImages) {
+          const rawUrl = img.image_url?.url || "";
+          if (rawUrl) {
+            const publicUrl = await uploadImageToStorage(supabase, rawUrl, agentName, projectId);
+            imageUrls.push(publicUrl || rawUrl);
+          }
         }
       }
 
-      console.log(`AC-DC: got ${imageUrls.length} image(s)`);
+      console.log(`${agentName}: got ${imageUrls.length} image(s) total`);
 
-      // Increment creatives usage
+      // Increment creatives usage (count = numImages)
       if (userId) {
-        await incrementUsage(supabase, userId, agentName, projectId, true);
+        for (let i = 0; i < numImages; i++) {
+          await incrementUsage(supabase, userId, agentName, projectId, true);
+        }
       }
 
       return new Response(
         JSON.stringify({
           type: "image_result",
-          text: textContent || "Aqui está o criativo gerado! 🎨",
+          text: textContent || `Aqui ${numImages === 1 ? "está o criativo gerado" : `estão os ${numImages} criativos gerados`}! 🎨`,
           images: imageUrls,
         }),
         {
