@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, ImgHTMLAttributes } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -38,6 +38,27 @@ const CREATIVE_FORMATS: CreativeFormat[] = [
   { id: "feed-portrait", label: "Feed Portrait", ratio: "4:5", dimensions: "1080×1350px" },
   { id: "banner", label: "Banner", ratio: "16:9", dimensions: "1200×628px" },
 ];
+
+/** Renders an image with a broken-image placeholder fallback */
+function ImageWithFallback({ src, alt, className }: ImgHTMLAttributes<HTMLImageElement>) {
+  const [errored, setErrored] = useState(false);
+  if (errored) {
+    return (
+      <div className={`${className} flex flex-col items-center justify-center gap-2 min-h-[180px] bg-muted/50 text-muted-foreground`}>
+        <ImageIcon className="w-8 h-8 opacity-40" />
+        <span className="text-xs text-center px-4">Não foi possível exibir a imagem.<br />Use o botão Baixar para obtê-la.</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => setErrored(true)}
+    />
+  );
+}
 
 const AgentChat = () => {
   const { agentCode } = useParams<{ agentCode: string }>();
@@ -345,43 +366,79 @@ const AgentChat = () => {
                             <ReactMarkdown>{msg.content}</ReactMarkdown>
                           </div>
                         )}
-                        {/* Generated images (AC-DC) */}
+                        {/* Generated images (AC-DC / AG-IMG) */}
                         {msg.images && msg.images.length > 0 && (
                           <div className="space-y-2">
                             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <Sparkles className="w-3 h-3 text-primary" />
-                              <span>Criativo gerado com Banana Pro</span>
+                              <span>
+                                {agentCode === "AG-IMG" ? "Criativo gerado com Nano Banana HD" : "Criativo gerado com Banana Pro"}
+                              </span>
+                              {/* Badge when any image is base64 (storage fallback) */}
+                              {msg.images.some(u => u.startsWith("data:")) && (
+                                <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                  Pré-visualização local
+                                </span>
+                              )}
                             </div>
                             <div className={`grid gap-2 ${msg.images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-                              {msg.images.map((url, imgIdx) => (
-                                <AnimatePresence key={imgIdx}>
-                                  <motion.div
-                                    initial={{ opacity: 0, scale: 0.95 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    className="relative group rounded-xl overflow-hidden border border-border"
-                                  >
-                                    <img
-                                      src={url}
-                                      alt={`Criativo ${imgIdx + 1}`}
-                                      className="w-full object-cover"
-                                    />
-                                    {/* Download overlay */}
-                                    <div className="absolute inset-0 bg-background/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                      <a
-                                        href={url}
-                                        download={`criativo-${agentCode}-${imgIdx + 1}.png`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <Download className="w-3 h-3" />
-                                        Baixar
-                                      </a>
-                                    </div>
-                                  </motion.div>
-                                </AnimatePresence>
-                              ))}
+                              {msg.images.map((url, imgIdx) => {
+                                const isBase64 = url.startsWith("data:");
+                                return (
+                                  <AnimatePresence key={imgIdx}>
+                                    <motion.div
+                                      initial={{ opacity: 0, scale: 0.95 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                      className="relative group rounded-xl overflow-hidden border border-border"
+                                    >
+                                      <ImageWithFallback
+                                        src={url}
+                                        alt={`Criativo ${imgIdx + 1}`}
+                                        className="w-full object-cover"
+                                      />
+                                      {/* Download overlay */}
+                                      <div className="absolute inset-0 bg-background/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                        {isBase64 ? (
+                                          <button
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              // Convert base64 to blob and download
+                                              const [header, data] = url.split(",");
+                                              const mime = header.match(/:(.*?);/)?.[1] || "image/png";
+                                              const binary = atob(data);
+                                              const arr = new Uint8Array(binary.length);
+                                              for (let j = 0; j < binary.length; j++) arr[j] = binary.charCodeAt(j);
+                                              const blob = new Blob([arr], { type: mime });
+                                              const blobUrl = URL.createObjectURL(blob);
+                                              const a = document.createElement("a");
+                                              a.href = blobUrl;
+                                              a.download = `criativo-${agentCode}-${imgIdx + 1}.png`;
+                                              a.click();
+                                              URL.revokeObjectURL(blobUrl);
+                                            }}
+                                          >
+                                            <Download className="w-3 h-3" />
+                                            Baixar
+                                          </button>
+                                        ) : (
+                                          <a
+                                            href={url}
+                                            download={`criativo-${agentCode}-${imgIdx + 1}.png`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <Download className="w-3 h-3" />
+                                            Baixar
+                                          </a>
+                                        )}
+                                      </div>
+                                    </motion.div>
+                                  </AnimatePresence>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
