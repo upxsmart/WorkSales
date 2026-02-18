@@ -49,7 +49,6 @@ type Phase = "entry" | "chat" | "running" | "results";
 const AGENT_EXECUTION_FLOW = ORCHESTRATOR_EXECUTION_ORDER;
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const AgentIcon = ({ code }: { code: string }) => {
   const agent = AGENTS_CONFIG[code as AgentCode];
@@ -79,6 +78,13 @@ const Orchestrator = () => {
   const projectId = activeProject?.id || null;
   const project = activeProject as unknown as Record<string, unknown> | null;
 
+  // Helper para obter o JWT token do usuário logado (necessário para edge functions)
+  const getUserToken = async (): Promise<string> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Usuário não autenticado");
+    return session.access_token;
+  };
+
   // Load chat history for ACO
   useEffect(() => {
     if (!projectId) return;
@@ -104,8 +110,7 @@ const Orchestrator = () => {
         .select("*")
         .eq("project_id", projectId)
         .order("created_at", { ascending: false })
-        .limit(1)
-        .single(),
+        .limit(1),
       supabase.from("agent_outputs")
         .select("*")
         .eq("project_id", projectId)
@@ -114,8 +119,8 @@ const Orchestrator = () => {
 
     if (outputsRes.data) setAllOutputs(outputsRes.data as AgentOutput[]);
 
-    if (runsRes.data) {
-      const run = runsRes.data as OrchestratorRun;
+    if (runsRes.data && runsRes.data.length > 0) {
+      const run = runsRes.data[0] as OrchestratorRun;
       setCurrentRun(run);
       if (run.status === "completed") {
         setPhase("results");
@@ -193,6 +198,9 @@ const Orchestrator = () => {
     setIsStartingRun(true);
 
     try {
+      // Obter JWT token do usuário (necessário para autenticar na edge function)
+      const userToken = await getUserToken();
+
       // Extrair dados coletados do chat
       const chatSummary = messages
         .filter(m => m.role === "assistant")
@@ -214,17 +222,17 @@ const Orchestrator = () => {
       setCurrentRun(run as OrchestratorRun);
       setPhase("running");
 
-      // Chamar edge function de orquestração
+      // Chamar edge function com JWT do usuário (não anon key)
       fetch(`${SUPABASE_URL}/functions/v1/orchestrator-run`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          Authorization: `Bearer ${userToken}`,
         },
         body: JSON.stringify({ run_id: run.id, action: "start" }),
       }).then(async (res) => {
         if (!res.ok) {
-          const err = await res.json();
+          const err = await res.json().catch(() => ({}));
           toast({ title: "Erro na orquestração", description: err.error || "Tente novamente.", variant: "destructive" });
           await supabase.from("orchestrator_runs").update({ status: "error" }).eq("id", run.id);
           setPhase("chat");
@@ -235,6 +243,7 @@ const Orchestrator = () => {
       });
 
     } catch (e) {
+      console.error("handleStartOrchestration error:", e);
       toast({ title: "Erro", description: "Não foi possível iniciar a orquestração.", variant: "destructive" });
     } finally {
       setIsStartingRun(false);
@@ -243,14 +252,19 @@ const Orchestrator = () => {
 
   const handleCancelRun = async () => {
     if (!currentRun) return;
-    await fetch(`${SUPABASE_URL}/functions/v1/orchestrator-run`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ run_id: currentRun.id, action: "cancel" }),
-    });
+    try {
+      const userToken = await getUserToken();
+      await fetch(`${SUPABASE_URL}/functions/v1/orchestrator-run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: JSON.stringify({ run_id: currentRun.id, action: "cancel" }),
+      });
+    } catch (e) {
+      console.error("handleCancelRun error:", e);
+    }
     setPhase("entry");
     setCurrentRun(null);
   };
@@ -336,7 +350,7 @@ const Orchestrator = () => {
           <button onClick={() => navigate("/dashboard")} className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
             <Brain className="w-5 h-5 text-white" />
           </div>
           <div className="flex-1">
@@ -452,7 +466,7 @@ const Orchestrator = () => {
                         {isLocked ? (
                           <div className="text-[10px] text-muted-foreground mt-1">🔒 Aguardando deps.</div>
                         ) : (
-                          <div className="text-[10px] text-green-400 mt-1">✓ Disponível</div>
+                          <div className="text-[10px] text-primary mt-1">✓ Disponível</div>
                         )}
                       </motion.button>
                     );
@@ -462,7 +476,7 @@ const Orchestrator = () => {
                 {currentRun?.status === "completed" && (
                   <div className="glass rounded-xl p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-green-400" />
+                      <CheckCircle2 className="w-5 h-5 text-primary" />
                       <div>
                         <div className="text-sm font-semibold">Plano anterior disponível</div>
                         <div className="text-xs text-muted-foreground">
@@ -519,7 +533,7 @@ const Orchestrator = () => {
                     className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}
                   >
                     {msg.role === "assistant" && (
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shrink-0 mt-1">
+                      <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0 mt-1">
                         <Brain className="w-4 h-4 text-white" />
                       </div>
                     )}
@@ -543,7 +557,7 @@ const Orchestrator = () => {
                 ))}
                 {isChatLoading && (
                   <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
                       <Brain className="w-4 h-4 text-white" />
                     </div>
                     <div className="glass rounded-2xl px-4 py-3 flex items-center gap-2">
@@ -672,7 +686,7 @@ const Orchestrator = () => {
                         )}
                       </div>
                       <div className="shrink-0">
-                        {status === "done" && <CheckCircle2 className="w-4 h-4 text-green-400" />}
+                        {status === "done" && <CheckCircle2 className="w-4 h-4 text-primary" />}
                         {status === "running" && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
                         {status === "pending" && <Clock className="w-4 h-4 text-muted-foreground/40" />}
                       </div>
@@ -700,8 +714,8 @@ const Orchestrator = () => {
             className="flex-1 flex flex-col"
           >
             {/* Results header */}
-            <div className="px-4 py-3 border-b border-border bg-green-500/5 flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-green-400 shrink-0" />
+            <div className="px-4 py-3 border-b border-border bg-primary/5 flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold">🎉 Plano completo gerado!</div>
                 <div className="text-xs text-muted-foreground truncate">
@@ -741,7 +755,7 @@ const Orchestrator = () => {
                         <Icon className="w-3 h-3 text-white" />
                       </div>
                       <span className="truncate font-medium">{agentConfig?.name || agent}</span>
-                      {hasResult && <CheckCircle2 className="w-3 h-3 text-green-400 ml-auto shrink-0" />}
+                      {hasResult && <CheckCircle2 className="w-3 h-3 text-primary ml-auto shrink-0" />}
                     </button>
                   );
                 })}
