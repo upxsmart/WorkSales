@@ -3,17 +3,18 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveProject } from "@/contexts/ActiveProjectContext";
-import { useAgentChat } from "@/hooks/useAgentChat";
+import { useAgentChat, type Message } from "@/hooks/useAgentChat";
 import { AGENTS_CONFIG, AgentCode } from "@/lib/agents";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import {
   ArrowLeft, Send, Loader2, Trash2, User, Bot,
   Check, RefreshCw, Download, Share2, Clock, RotateCcw,
+  ImageIcon, Sparkles,
 } from "lucide-react";
 
 type AgentOutput = {
@@ -111,6 +112,10 @@ const AgentChat = () => {
     if (lastMsg.role === "assistant") {
       const userMsg = messages[messages.length - 2];
       if (userMsg?.role === "user") {
+        // For image messages, store image URLs as JSON in content
+        const assistantContent = lastMsg.images?.length
+          ? JSON.stringify({ text: lastMsg.content, images: lastMsg.images })
+          : lastMsg.content;
         Promise.all([
           supabase.from("chat_messages").insert({
             project_id: projectId,
@@ -122,7 +127,7 @@ const AgentChat = () => {
             project_id: projectId,
             agent_name: agentCode,
             role: "assistant",
-            content: lastMsg.content,
+            content: assistantContent,
           }),
         ]);
       }
@@ -243,7 +248,9 @@ const AgentChat = () => {
           </div>
           <div className="flex-1">
             <h1 className="font-display font-semibold text-sm">{agent.fullName}</h1>
-            <p className="text-xs text-muted-foreground">{agent.code} · Claude Sonnet 4</p>
+            <p className="text-xs text-muted-foreground">
+              {agent.code} · {agentCode === "AC-DC" ? "Nano Banana Pro · Geração de Imagens" : "Gemini 3 Flash"}
+            </p>
           </div>
           {messages.length > 0 && (
             <Button variant="ghost" size="icon" onClick={handleClear} title="Limpar conversa">
@@ -278,8 +285,53 @@ const AgentChat = () => {
                       : "glass"
                   }`}>
                     {msg.role === "assistant" ? (
-                      <div className="prose prose-sm prose-invert max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_h1]:text-foreground [&_h2]:text-foreground [&_h3]:text-foreground [&_strong]:text-foreground [&_li]:text-muted-foreground [&_p]:text-muted-foreground [&_table]:text-muted-foreground [&_th]:text-foreground [&_td]:border-border [&_th]:border-border">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      <div className="space-y-3">
+                        {/* Text content */}
+                        {msg.content && (
+                          <div className="prose prose-sm prose-invert max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_h1]:text-foreground [&_h2]:text-foreground [&_h3]:text-foreground [&_strong]:text-foreground [&_li]:text-muted-foreground [&_p]:text-muted-foreground [&_table]:text-muted-foreground [&_th]:text-foreground [&_td]:border-border [&_th]:border-border">
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                          </div>
+                        )}
+                        {/* Generated images (AC-DC) */}
+                        {msg.images && msg.images.length > 0 && (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Sparkles className="w-3 h-3 text-primary" />
+                              <span>Criativo gerado com Nano Banana Pro</span>
+                            </div>
+                            <div className={`grid gap-2 ${msg.images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                              {msg.images.map((url, imgIdx) => (
+                                <AnimatePresence key={imgIdx}>
+                                  <motion.div
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="relative group rounded-xl overflow-hidden border border-border"
+                                  >
+                                    <img
+                                      src={url}
+                                      alt={`Criativo ${imgIdx + 1}`}
+                                      className="w-full object-cover"
+                                    />
+                                    {/* Download overlay */}
+                                    <div className="absolute inset-0 bg-background/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                      <a
+                                        href={url}
+                                        download={`criativo-${agentCode}-${imgIdx + 1}.png`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <Download className="w-3 h-3" />
+                                        Baixar
+                                      </a>
+                                    </div>
+                                  </motion.div>
+                                </AnimatePresence>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
@@ -312,8 +364,17 @@ const AgentChat = () => {
                     <AgentIcon className="w-4 h-4 text-white" />
                   </div>
                   <div className="glass rounded-2xl px-4 py-3 flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">Digitando...</span>
+                    {agentCode === "AC-DC" ? (
+                      <>
+                        <ImageIcon className="w-4 h-4 animate-pulse text-primary" />
+                        <span className="text-xs text-muted-foreground">Gerando criativo com Nano Banana Pro...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Digitando...</span>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -396,17 +457,61 @@ const AgentChat = () => {
                       </Button>
                     </div>
                   </div>
-                  <div className="glass rounded-xl p-4">
-                    <div className="prose prose-sm prose-invert max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_h1]:text-foreground [&_h2]:text-foreground [&_h3]:text-foreground [&_strong]:text-foreground [&_li]:text-muted-foreground [&_p]:text-muted-foreground">
-                      <ReactMarkdown>{lastAssistantMsg.content}</ReactMarkdown>
+
+                  {/* Image output panel for AC-DC */}
+                  {lastAssistantMsg.images && lastAssistantMsg.images.length > 0 ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Sparkles className="w-3 h-3 text-primary" />
+                        <span>Nano Banana Pro · {lastAssistantMsg.images.length} criativo{lastAssistantMsg.images.length > 1 ? "s" : ""}</span>
+                      </div>
+                      <div className={`grid gap-3 ${lastAssistantMsg.images.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                        {lastAssistantMsg.images.map((url, idx) => (
+                          <div key={idx} className="relative group rounded-xl overflow-hidden border border-border">
+                            <img src={url} alt={`Criativo ${idx + 1}`} className="w-full object-cover" />
+                            <div className="absolute inset-0 bg-background/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <a
+                                href={url}
+                                download={`criativo-${agentCode}-${idx + 1}.png`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium"
+                              >
+                                <Download className="w-3 h-3" /> Baixar HD
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {lastAssistantMsg.content && (
+                        <div className="glass rounded-xl p-3">
+                          <p className="text-xs text-muted-foreground">{lastAssistantMsg.content}</p>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  ) : (
+                    <div className="glass rounded-xl p-4">
+                      <div className="prose prose-sm prose-invert max-w-none [&_p]:mb-2 [&_ul]:mb-2 [&_ol]:mb-2 [&_h1]:text-foreground [&_h2]:text-foreground [&_h3]:text-foreground [&_strong]:text-foreground [&_li]:text-muted-foreground [&_p]:text-muted-foreground">
+                        <ReactMarkdown>{lastAssistantMsg.content}</ReactMarkdown>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-                  <AgentIcon className="w-12 h-12 mb-3 opacity-20" />
-                  <p className="text-sm">Converse com o agente para gerar outputs.</p>
-                  <p className="text-xs mt-1">Os resultados aparecerão aqui em tempo real.</p>
+                  {agentCode === "AC-DC" ? (
+                    <>
+                      <ImageIcon className="w-12 h-12 mb-3 opacity-20" />
+                      <p className="text-sm">Descreva o criativo que deseja gerar.</p>
+                      <p className="text-xs mt-1">A imagem aparecerá aqui em instantes.</p>
+                    </>
+                  ) : (
+                    <>
+                      <AgentIcon className="w-12 h-12 mb-3 opacity-20" />
+                      <p className="text-sm">Converse com o agente para gerar outputs.</p>
+                      <p className="text-xs mt-1">Os resultados aparecerão aqui em tempo real.</p>
+                    </>
+                  )}
                 </div>
               )}
             </TabsContent>
@@ -432,7 +537,7 @@ const AgentChat = () => {
                         </div>
                         <div className="flex items-center gap-1">
                           {out.is_approved && (
-                            <span className="text-xs text-green-400 flex items-center gap-1">
+                            <span className="text-xs text-primary flex items-center gap-1">
                               <Check className="w-3 h-3" /> Aprovado
                             </span>
                           )}
