@@ -54,7 +54,7 @@ serve(async (req) => {
       }
 
       // Validate key_name is one of the allowed keys
-      const ALLOWED_KEYS = ["ANTHROPIC_API_KEY", "STRIPE_SECRET_KEY", "RESEND_API_KEY"];
+      const ALLOWED_KEYS = ["ANTHROPIC_API_KEY", "STRIPE_SECRET_KEY", "RESEND_API_KEY", "GOOGLE_API_KEY"];
       if (!ALLOWED_KEYS.includes(key_name)) {
         return new Response(JSON.stringify({ error: "key_name inválido" }), {
           status: 400,
@@ -179,7 +179,46 @@ serve(async (req) => {
         }
       }
 
+      // ── Google AI Studio (Banana Pro) ─────────────────────────────
+      if (!api || api === "google_ai") {
+        const key = dbKeys["GOOGLE_API_KEY"] || Deno.env.get("GOOGLE_API_KEY");
+        if (!key) {
+          results.google_ai = { status: "missing", error: "GOOGLE_API_KEY não configurada" };
+        } else {
+          const start = Date.now();
+          try {
+            // Test with a simple text generation call to validate key
+            const res = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
+              { method: "GET" }
+            );
+            const latency = Date.now() - start;
+            if (res.ok) {
+              await supabase.from("api_configs").update({
+                last_tested_at: new Date().toISOString(),
+                last_test_status: "ok",
+              }).eq("key_name", "GOOGLE_API_KEY");
+              results.google_ai = { status: "ok", latency };
+            } else {
+              const errBody = await res.json().catch(() => ({}));
+              await supabase.from("api_configs").update({
+                last_tested_at: new Date().toISOString(),
+                last_test_status: "error",
+              }).eq("key_name", "GOOGLE_API_KEY");
+              results.google_ai = {
+                status: "error",
+                latency,
+                error: errBody?.error?.message || `HTTP ${res.status}`,
+              };
+            }
+          } catch (e) {
+            results.google_ai = { status: "error", error: String(e) };
+          }
+        }
+      }
+
       // ── Stripe ────────────────────────────────────────────────────
+
       if (!api || api === "stripe") {
         const key = dbKeys["STRIPE_SECRET_KEY"] || Deno.env.get("STRIPE_SECRET_KEY");
         if (!key) {
