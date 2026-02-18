@@ -386,24 +386,47 @@ serve(async (req) => {
       const imageAbort = new AbortController();
       const imageTimeout = setTimeout(() => imageAbort.abort(), 55000);
 
+      // Use direct Google AI Studio key if configured, fallback to Lovable gateway
+      const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY") ||
+        (await supabase.from("api_configs").select("key_value").eq("key_name", "GOOGLE_API_KEY").eq("is_active", true).maybeSingle().then(r => r.data?.key_value || ""));
+
       let imageResponse: Response;
       try {
-        imageResponse = await fetch(
-          "https://ai.gateway.lovable.dev/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: IMAGE_MODEL,
-              messages: imageMessages,
-              modalities: ["image", "text"],
-            }),
-            signal: imageAbort.signal,
-          }
-        );
+        if (GOOGLE_API_KEY) {
+          // Direct Google AI Studio call (Banana Pro)
+          console.log("AC-DC: using direct Google AI Studio key (Banana Pro)");
+          imageResponse = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${GOOGLE_API_KEY}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: buildImagePrompt(lastUserMessage.content, fullSystemPrompt) }] }],
+                generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+              }),
+              signal: imageAbort.signal,
+            }
+          );
+        } else {
+          // Fallback: Lovable AI Gateway
+          console.log("AC-DC: using Lovable AI Gateway for image (no GOOGLE_API_KEY)");
+          imageResponse = await fetch(
+            "https://ai.gateway.lovable.dev/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: IMAGE_MODEL,
+                messages: imageMessages,
+                modalities: ["image", "text"],
+              }),
+              signal: imageAbort.signal,
+            }
+          );
+        }
       } catch (fetchErr) {
         clearTimeout(imageTimeout);
         const isTimeout =
@@ -441,23 +464,39 @@ serve(async (req) => {
       }
 
       const imageData = await imageResponse.json();
-      const choice = imageData.choices?.[0]?.message;
-      const textContent: string = choice?.content || "";
-      const generatedImages: Array<{ image_url: { url: string } }> =
-        choice?.images || [];
 
-      console.log(`AC-DC: got ${generatedImages.length} image(s)`);
-
+      // Parse response — Google AI Studio direct vs Lovable gateway have different shapes
+      let textContent = "";
       const imageUrls: string[] = [];
-      for (const img of generatedImages) {
-        const rawUrl = img.image_url?.url || "";
-        if (rawUrl) {
-          const publicUrl = await uploadImageToStorage(
-            supabase, rawUrl, agentName, projectId
-          );
-          if (publicUrl) imageUrls.push(publicUrl);
+
+      if (GOOGLE_API_KEY) {
+        // Google AI Studio response format
+        // candidates[0].content.parts[] → { text } or { inlineData: { mimeType, data } }
+        const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> =
+          imageData?.candidates?.[0]?.content?.parts || [];
+        for (const part of parts) {
+          if (part.text) textContent += part.text;
+          if (part.inlineData?.data) {
+            const base64 = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            const publicUrl = await uploadImageToStorage(supabase, base64, agentName, projectId);
+            if (publicUrl) imageUrls.push(publicUrl);
+          }
+        }
+      } else {
+        // Lovable gateway response format
+        const choice = imageData.choices?.[0]?.message;
+        textContent = choice?.content || "";
+        const gatewayImages: Array<{ image_url: { url: string } }> = choice?.images || [];
+        for (const img of gatewayImages) {
+          const rawUrl = img.image_url?.url || "";
+          if (rawUrl) {
+            const publicUrl = await uploadImageToStorage(supabase, rawUrl, agentName, projectId);
+            if (publicUrl) imageUrls.push(publicUrl);
+          }
         }
       }
+
+      console.log(`AC-DC: got ${imageUrls.length} image(s)`);
 
       // Increment creatives usage
       if (userId) {
