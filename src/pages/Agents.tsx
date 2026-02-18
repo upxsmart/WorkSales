@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useActiveProject } from "@/contexts/ActiveProjectContext";
-import { AGENTS_CONFIG, AgentCode } from "@/lib/agents";
+import { AGENTS_CONFIG, AGENT_DEPENDENCIES, AgentCode } from "@/lib/agents";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -14,18 +14,9 @@ import {
 
 const AGENTS = Object.values(AGENTS_CONFIG);
 
-// Dependency map: agent -> agents it depends on
-const AGENT_DEPENDENCIES: Record<string, string[]> = {
-  "AA-D100": [],
-  "AO-GO": ["AA-D100"],
-  "AJ-AF": ["AA-D100", "AO-GO"],
-  "AE-C": ["AA-D100", "AO-GO"],
-  "AM-CC": ["AA-D100", "AO-GO", "AE-C"],
-  "AC-DC": ["AM-CC"],
-  "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC"],
-};
-
-const FLOW_ORDER: AgentCode[] = ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "ACO"];
+const FLOW_ORDER: AgentCode[] = [
+  "AA-D100", "AO-GO", "AJ-AF", "AM-CC", "AC-DC", "AG-IMG", "AE-C", "AT-GP", "ACO",
+];
 
 interface AgentStats {
   outputs: number;
