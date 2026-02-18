@@ -313,9 +313,15 @@ const AgentChat = () => {
     }
   }, [location.state]);
 
-  /** Navega para o AG-IMG pré-preenchendo o input com o último output do AC-DC */
+  /** Navega para o AG-IMG pré-preenchendo o input com o texto limpo do último output do AC-DC */
   const handleSendToAgImg = useCallback((content: string) => {
-    navigate(`/agent/AG-IMG`, { state: { prefillInput: content } });
+    // content pode ser JSON { text, images } — extrair só o texto do briefing
+    let briefing = content;
+    try {
+      const parsed = JSON.parse(content);
+      if (typeof parsed?.text === "string") briefing = parsed.text;
+    } catch { /* texto puro, usa como está */ }
+    navigate(`/agent/AG-IMG`, { state: { prefillInput: briefing } });
   }, [navigate]);
 
   if (!agent) {
