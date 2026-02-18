@@ -28,6 +28,14 @@ type AgentOutput = {
   version: number;
 };
 
+type CreativeFormat = { id: string; label: string; ratio: string; dimensions: string };
+
+const CREATIVE_FORMATS: CreativeFormat[] = [
+  { id: "story", label: "Story", ratio: "9:16", dimensions: "1080×1920px" },
+  { id: "feed", label: "Feed", ratio: "1:1", dimensions: "1080×1080px" },
+  { id: "banner", label: "Banner", ratio: "16:9", dimensions: "1200×628px" },
+];
+
 const AgentChat = () => {
   const { agentCode } = useParams<{ agentCode: string }>();
   const navigate = useNavigate();
@@ -42,6 +50,9 @@ const AgentChat = () => {
   const [allOutputs, setAllOutputs] = useState<AgentOutput[]>([]);
   const [hasAutoGreeted, setHasAutoGreeted] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // AC-DC: creative format selector
+  const [selectedFormat, setSelectedFormat] = useState<CreativeFormat>(CREATIVE_FORMATS[1]);
 
   const agent = agentCode && agentCode in AGENTS_CONFIG
     ? AGENTS_CONFIG[agentCode as AgentCode]
@@ -136,7 +147,11 @@ const AgentChat = () => {
 
   const handleSend = () => {
     if (!input.trim() || isLoading || !agentCode) return;
-    sendMessage(input.trim(), agentCode, projectId || undefined, project || undefined);
+    // For AC-DC, append format context to the prompt
+    const messageToSend = agentCode === "AC-DC"
+      ? `${input.trim()}\n\n[Formato: ${selectedFormat.label} (${selectedFormat.ratio}) — ${selectedFormat.dimensions}]`
+      : input.trim();
+    sendMessage(messageToSend, agentCode, projectId || undefined, project || undefined);
     setInput("");
   };
 
@@ -402,23 +417,52 @@ const AgentChat = () => {
 
           {/* Input */}
           <div className="border-t border-border bg-background/80 backdrop-blur-xl px-4 py-3">
-            <div className="max-w-3xl mx-auto flex gap-3">
-              <Textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Digite sua mensagem..."
-                className="min-h-[44px] max-h-32 resize-none"
-                rows={1}
-              />
-              <Button
-                onClick={handleSend}
-                disabled={!input.trim() || isLoading}
-                className="gradient-primary text-primary-foreground glow-primary shrink-0"
-                size="icon"
-              >
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              </Button>
+            <div className="max-w-3xl mx-auto space-y-2">
+              {/* Format selector — AC-DC only */}
+              {agentCode === "AC-DC" && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground shrink-0">Formato:</span>
+                  <div className="flex gap-1.5">
+                    {CREATIVE_FORMATS.map((fmt) => (
+                      <button
+                        key={fmt.id}
+                        onClick={() => setSelectedFormat(fmt)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+                          selectedFormat.id === fmt.id
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                        }`}
+                      >
+                        {/* Tiny aspect ratio preview */}
+                        <span className={`inline-block border border-current rounded-sm ${
+                          fmt.id === "story" ? "w-2 h-3.5" : fmt.id === "feed" ? "w-3 h-3" : "w-4 h-2.5"
+                        }`} />
+                        {fmt.label}
+                        <span className="opacity-60">{fmt.ratio}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-xs text-muted-foreground ml-1 hidden sm:block">{selectedFormat.dimensions}</span>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <Textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={agentCode === "AC-DC" ? `Descreva o criativo ${selectedFormat.label} (${selectedFormat.ratio}) que deseja gerar...` : "Digite sua mensagem..."}
+                  className="min-h-[44px] max-h-32 resize-none"
+                  rows={1}
+                />
+                <Button
+                  onClick={handleSend}
+                  disabled={!input.trim() || isLoading}
+                  className="gradient-primary text-primary-foreground glow-primary shrink-0"
+                  size="icon"
+                >
+                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
