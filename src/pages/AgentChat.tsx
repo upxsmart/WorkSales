@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, ImgHTMLAttributes } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveProject } from "@/contexts/ActiveProjectContext";
@@ -17,6 +17,7 @@ import {
   Check, RefreshCw, Download, Share2, Clock, RotateCcw,
   ImageIcon, Sparkles,
 } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 
 type AgentOutput = {
@@ -63,6 +64,7 @@ function ImageWithFallback({ src, alt, className }: ImgHTMLAttributes<HTMLImageE
 const AgentChat = () => {
   const { agentCode } = useParams<{ agentCode: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { messages, isLoading, sendMessage, clearMessages, setMessages } = useAgentChat();
   const { toast } = useToast();
@@ -298,6 +300,21 @@ const AgentChat = () => {
     }
   }, [projectId, agentCode, outputs.length, toast]);
 
+  // Pré-preenche o input quando chegou via navegação com state (ex: AC-DC → AG-IMG)
+  useEffect(() => {
+    const state = location.state as { prefillInput?: string } | null;
+    if (state?.prefillInput) {
+      setInput(state.prefillInput);
+      // Limpa o state para não repreencher ao navegar de volta
+      window.history.replaceState({}, "");
+    }
+  }, [location.state]);
+
+  /** Navega para o AG-IMG pré-preenchendo o input com o último output do AC-DC */
+  const handleSendToAgImg = useCallback((content: string) => {
+    navigate(`/agent/AG-IMG`, { state: { prefillInput: content } });
+  }, [navigate]);
+
   if (!agent) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -447,7 +464,7 @@ const AgentChat = () => {
                       <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                     )}
                     {msg.role === "assistant" && !isLoading && i === messages.length - 1 && i > 0 && (
-                      <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
+                      <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border/50">
                         <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleApproveOutput(msg.content)}>
                           <Check className="w-3 h-3 mr-1" /> Aprovar
                         </Button>
@@ -457,6 +474,18 @@ const AgentChat = () => {
                         <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleExport(msg.content)}>
                           <Download className="w-3 h-3 mr-1" /> Exportar
                         </Button>
+                        {agentCode === "AC-DC" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs h-7 text-primary/70 hover:text-primary hover:bg-primary/10"
+                            onClick={() => handleSendToAgImg(msg.content)}
+                            title="Abre o AG-IMG com este briefing pré-preenchido"
+                          >
+                            <ExternalLink className="w-3 h-3 mr-1" />
+                            Enviar para AG-IMG
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>
