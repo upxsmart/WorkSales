@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveProject } from "@/contexts/ActiveProjectContext";
-import { useAgentChat, type Message } from "@/hooks/useAgentChat";
+import { useAgentChat, type Message, type AgentDemand, extractDemands } from "@/hooks/useAgentChat";
 import { AGENTS_CONFIG, AgentCode } from "@/lib/agents";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -148,15 +148,49 @@ const AgentChat = () => {
     }
   }, [isLoading, messages, projectId, agentCode]);
 
+  // Save AT-GP demands found in response to agent_demands table
+  const handleDemandsFound = useCallback(async (demands: AgentDemand[], _fullText: string) => {
+    if (!projectId || !agentCode) return;
+
+    const inserts = demands.map((d) => ({
+      project_id: projectId,
+      from_agent: agentCode,
+      to_agent: d.agent_target,
+      demand_type: d.demand_type || "optimization",
+      reason: d.reason,
+      suggestion: d.suggestion || "",
+      priority: d.priority || "medium",
+      status: "pending",
+    }));
+
+    const { error } = await supabase.from("agent_demands").insert(inserts);
+    if (!error) {
+      toast({
+        title: `📋 ${demands.length} demanda${demands.length > 1 ? "s" : ""} gerada${demands.length > 1 ? "s" : ""}`,
+        description: `AT-GP enviou solicitações para: ${[...new Set(demands.map(d => d.agent_target))].join(", ")}`,
+        duration: 6000,
+      });
+    } else {
+      console.error("Erro ao salvar demandas:", error);
+    }
+  }, [projectId, agentCode, toast]);
+
   const handleSend = () => {
     if (!input.trim() || isLoading || !agentCode) return;
     // For AC-DC, append format context to the prompt
     const messageToSend = agentCode === "AC-DC"
       ? `${input.trim()}\n\n[Formato: ${selectedFormat.label} (${selectedFormat.ratio}) — ${selectedFormat.dimensions}]`
       : input.trim();
-    sendMessage(messageToSend, agentCode, projectId || undefined, project || undefined);
+    sendMessage(
+      messageToSend,
+      agentCode,
+      projectId || undefined,
+      project || undefined,
+      agentCode === "AT-GP" ? handleDemandsFound : undefined
+    );
     setInput("");
   };
+
 
   const handleClear = async () => {
     if (projectId && agentCode) {

@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { label: "Configurações", icon: Settings, path: "/settings" },
 ];
 
+
 const DashboardLayout = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ const DashboardLayout = () => {
   } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [pendingDemands, setPendingDemands] = useState(0);
   const { projects, activeProject, setActiveProjectId } = useActiveProject();
   useRealtimeNotifications(user?.id);
 
@@ -50,6 +52,58 @@ const DashboardLayout = () => {
       setIsAdmin(!!data);
     });
   }, [user]);
+
+  // Load pending demands count for active project
+  useEffect(() => {
+    if (!activeProject?.id) { setPendingDemands(0); return; }
+    supabase
+      .from("agent_demands")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", activeProject.id)
+      .eq("status", "pending")
+      .then(({ count }) => setPendingDemands(count || 0));
+  }, [activeProject?.id]);
+
+  // Realtime: listen for new demands on active project
+  useEffect(() => {
+    if (!activeProject?.id) return;
+    const channel = supabase
+      .channel(`demands-${activeProject.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "agent_demands",
+          filter: `project_id=eq.${activeProject.id}`,
+        },
+        () => {
+          setPendingDemands((prev) => prev + 1);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "agent_demands",
+          filter: `project_id=eq.${activeProject.id}`,
+        },
+        () => {
+          // Refresh count on any update
+          supabase
+            .from("agent_demands")
+            .select("id", { count: "exact", head: true })
+            .eq("project_id", activeProject.id)
+            .eq("status", "pending")
+            .then(({ count }) => setPendingDemands(count || 0));
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [activeProject?.id]);
+
+
 
   const handleSignOut = async () => {
     await signOut();
@@ -77,6 +131,7 @@ const DashboardLayout = () => {
         <nav className="flex-1 px-3 space-y-1">
           {NAV_ITEMS.map((item) => {
             const isActive = location.pathname === item.path;
+            const isOrchestrador = item.path === "/agent/ACO";
             return (
               <button
                 key={item.label}
@@ -88,11 +143,17 @@ const DashboardLayout = () => {
                 }`}
               >
                 <item.icon className={`w-4 h-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                {item.label}
+                <span className="flex-1 text-left">{item.label}</span>
+                {isOrchestrador && pendingDemands > 0 && (
+                  <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold leading-none">
+                    {pendingDemands > 99 ? "99+" : pendingDemands}
+                  </span>
+                )}
               </button>
             );
           })}
         </nav>
+
 
         <div className="p-4 border-t border-sidebar-border space-y-1">
           {isAdmin && (
