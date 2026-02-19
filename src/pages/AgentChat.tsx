@@ -15,7 +15,7 @@ import MetaAdsConnect from "@/components/MetaAdsConnect";
 import {
   ArrowLeft, Send, Loader2, Trash2, User, Bot,
   Check, RefreshCw, Download, Share2, Clock, RotateCcw,
-  ImageIcon, Sparkles, ExternalLink, ArrowRightLeft,
+  ImageIcon, Sparkles, ExternalLink, ArrowRightLeft, ImagePlay,
 } from "lucide-react";
 
 
@@ -601,24 +601,62 @@ const AgentChat = () => {
               ))}
 
               {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-                <div className="flex gap-3">
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex gap-3"
+                >
                   <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${agent.color} flex items-center justify-center shrink-0`}>
                     <AgentIcon className="w-4 h-4 text-white" />
                   </div>
-                  <div className="glass rounded-2xl px-4 py-3 flex items-center gap-2">
-                    {agentCode === "AC-DC" ? (
-                      <>
-                        <ImageIcon className="w-4 h-4 animate-pulse text-primary" />
-                        <span className="text-xs text-muted-foreground">Gerando criativo com Banana Pro...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Digitando...</span>
-                      </>
-                    )}
-                  </div>
-                </div>
+                  {agentCode === "AG-IMG" ? (
+                    <div className="glass rounded-2xl px-5 py-4 flex flex-col gap-3 min-w-[260px]">
+                      {/* Animated banana icon row */}
+                      <div className="flex items-center gap-2.5">
+                        <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 shrink-0">
+                          <ImagePlay className="w-4 h-4 text-white" />
+                          <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-primary animate-ping" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-foreground leading-tight">Gerando criativo com Nano Banana...</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">Google Gemini Image · Alta definição</p>
+                        </div>
+                      </div>
+                      {/* Animated progress bar */}
+                      <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                        <motion.div
+                          className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
+                          initial={{ x: "-100%" }}
+                          animate={{ x: "100%" }}
+                          transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
+                        />
+                      </div>
+                      {/* Shimmer cards */}
+                      <div className={`grid gap-2 ${imageCount > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                        {Array.from({ length: imageCount }).map((_, k) => (
+                          <div key={k} className="rounded-lg overflow-hidden aspect-square bg-muted/60 relative">
+                            <motion.div
+                              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                              initial={{ x: "-100%" }}
+                              animate={{ x: "100%" }}
+                              transition={{ repeat: Infinity, duration: 1.2, delay: k * 0.2, ease: "linear" }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : agentCode === "AC-DC" ? (
+                    <div className="glass rounded-2xl px-4 py-3 flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 animate-pulse text-primary" />
+                      <span className="text-xs text-muted-foreground">Gerando criativo com Banana Pro...</span>
+                    </div>
+                  ) : (
+                    <div className="glass rounded-2xl px-4 py-3 flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">Digitando...</span>
+                    </div>
+                  )}
+                </motion.div>
               )}
 
               <div ref={messagesEndRef} />
