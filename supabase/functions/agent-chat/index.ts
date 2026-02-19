@@ -122,29 +122,33 @@ async function incrementUsage(
 ): Promise<void> {
   const field = isImage ? "creatives_used" : "interactions_used";
 
-  // Increment the counter
-  await supabase.rpc("increment_profile_usage", {
-    _user_id: userId,
-    _field: field,
-  }).catch(() => {
+  // Increment the counter via RPC (try/catch — .catch() not supported on PostgrestBuilder in Deno)
+  try {
+    await supabase.rpc("increment_profile_usage", {
+      _user_id: userId,
+      _field: field,
+    });
+  } catch {
     // Fallback: manual increment
-    supabase
-      .from("profiles")
-      .select(field)
-      .eq("user_id", userId)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          supabase
-            .from("profiles")
-            .update({ [field]: (data as Record<string, number>)[field] + 1 })
-            .eq("user_id", userId);
-        }
-      });
-  });
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select(field)
+        .eq("user_id", userId)
+        .single();
+      if (data) {
+        await supabase
+          .from("profiles")
+          .update({ [field]: (data as Record<string, number>)[field] + 1 })
+          .eq("user_id", userId);
+      }
+    } catch (e) {
+      console.error("incrementUsage fallback error:", e);
+    }
+  }
 
-  // Log usage
-  await supabase.from("usage_logs").insert({
+  // Log usage (fire-and-forget, don't block the response)
+  supabase.from("usage_logs").insert({
     user_id: userId,
     project_id: projectId || null,
     agent_code: agentCode,
