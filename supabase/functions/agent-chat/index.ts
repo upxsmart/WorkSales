@@ -549,7 +549,17 @@ serve(async (req) => {
       clearTimeout(imageTimeout);
 
       // Check for errors in any response — on 402/429, try Google direct fallback
-      const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY");
+      // Priority: Supabase secret → api_configs table (admin-configured)
+      let GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY") || null;
+      if (!GOOGLE_API_KEY) {
+        const { data: googleCfg } = await supabase
+          .from("api_configs")
+          .select("key_value")
+          .eq("key_name", "GOOGLE_API_KEY")
+          .eq("is_active", true)
+          .maybeSingle();
+        if (googleCfg?.key_value) GOOGLE_API_KEY = googleCfg.key_value;
+      }
       let useGatewayResponses = true;
 
       for (const r of responses) {
@@ -608,8 +618,11 @@ serve(async (req) => {
         }
         if (!fallbackSuccess) {
           // Both gateway and fallback failed — return friendly 402 to trigger UI toast
+          const reason = GOOGLE_API_KEY
+            ? "Falha ao gerar imagem. A chave Google AI pode ser inválida ou a geração de imagens não está disponível na sua região."
+            : "Créditos insuficientes. Adicione créditos ao workspace Lovable em Configurações → Workspace → Usage.";
           return new Response(
-            JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace Lovable em Configurações → Workspace → Usage." }),
+            JSON.stringify({ error: reason }),
             { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
