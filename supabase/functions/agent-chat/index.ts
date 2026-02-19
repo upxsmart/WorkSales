@@ -45,6 +45,123 @@ const IMAGE_AGENTS = new Set(["AC-DC", "AG-IMG"]);
 const IMAGE_MODEL = "google/gemini-2.5-flash-image"; // Nano Banana — Lovable Gateway
 const TEXT_MODEL = "google/gemini-3-flash-preview";
 
+// ── Fallback: Google AI Studio direct API for image generation ──────────────
+// Note: gemini-2.5-flash-image via Lovable gateway is the primary path.
+// Google AI Studio direct does not support image generation in all regions.
+// This fallback attempts it anyway, silently skipping if unavailable.
+async function generateImageViaGoogleDirect(
+  prompt: string,
+  googleApiKey: string
+): Promise<{ base64: string; mimeType: string } | null> {
+  // gemini-2.5-flash supports image generation via AI Studio in some regions
+  const model = "gemini-2.5-flash";
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${googleApiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseModalities: ["IMAGE", "TEXT"] },
+        }),
+      }
+    );
+    if (!resp.ok) {
+      const errBody = await resp.text();
+      console.error(`Google direct image API error (${model}):`, resp.status, errBody);
+      return null;
+    }
+    const data = await resp.json();
+    const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> =
+      data?.candidates?.[0]?.content?.parts || [];
+    for (const part of parts) {
+      if (part.inlineData?.data) {
+        return { base64: part.inlineData.data, mimeType: part.inlineData.mimeType || "image/png" };
+      }
+    }
+    console.warn(`Google model ${model} returned no image parts.`);
+    return null;
+  } catch (e) {
+    console.error(`generateImageViaGoogleDirect error:`, e);
+    return null;
+  }
+}
+
+// ── Fallback: Anthropic for text generation ─────────────────────────────────
+async function generateTextViaAnthropic(
+  systemPrompt: string,
+  messages: Array<{ role: string; content: string }>,
+  anthropicApiKey: string
+): Promise<ReadableStream | null> {
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": anthropicApiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-haiku-20241022",
+        max_tokens: 4096,
+        system: systemPrompt,
+        stream: true,
+        messages: messages.map((m) => ({
+          role: m.role === "user" ? "user" : "assistant",
+          content: m.content,
+        })),
+      }),
+    });
+    if (!resp.ok) {
+      console.error("Anthropic API error:", resp.status, await resp.text());
+      return null;
+    }
+    // Convert Anthropic SSE to OpenAI-compatible SSE format
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    (async () => {
+      const reader = resp.body!.getReader();
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let idx: number;
+          while ((idx = buffer.indexOf("\n")) !== -1) {
+            const line = buffer.slice(0, idx).replace(/\r$/, "");
+            buffer = buffer.slice(idx + 1);
+            if (!line.startsWith("data: ")) continue;
+            const jsonStr = line.slice(6).trim();
+            try {
+              const parsed = JSON.parse(jsonStr);
+              if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
+                const chunk = {
+                  choices: [{ delta: { content: parsed.delta.text } }],
+                };
+                await writer.write(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              } else if (parsed.type === "message_stop") {
+                await writer.write(encoder.encode("data: [DONE]\n\n"));
+              }
+            } catch { /* ignore parse errors */ }
+          }
+        }
+      } finally {
+        await writer.close();
+      }
+    })();
+
+    return readable;
+  } catch (e) {
+    console.error("generateTextViaAnthropic error:", e);
+    return null;
+  }
+}
+
 // Plan interaction limits (fallback if plans_config unavailable)
 const PLAN_LIMITS: Record<string, number> = {
   starter: 100,
@@ -431,20 +548,16 @@ serve(async (req) => {
       }
       clearTimeout(imageTimeout);
 
-      // Check for errors in any response (use first error found)
+      // Check for errors in any response — on 402/429, try Google direct fallback
+      const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY");
+      let useGatewayResponses = true;
+
       for (const r of responses) {
         if (!r.ok) {
-          if (r.status === 429) {
-            return new Response(
-              JSON.stringify({ error: "Limite de requisições excedido. Tente novamente." }),
-              { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-          if (r.status === 402) {
-            return new Response(
-              JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }),
-              { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
+          if (r.status === 402 || r.status === 429) {
+            useGatewayResponses = false;
+            console.log(`Gateway returned ${r.status}, falling back to Google AI Studio direct API`);
+            break;
           }
           const errText = await r.text();
           console.error("Image API error:", r.status, errText);
@@ -459,17 +572,46 @@ serve(async (req) => {
       let textContent = "";
       const imageUrls: string[] = [];
 
-      for (const r of responses) {
-        const imageData = await r.json();
-        const choice = imageData.choices?.[0]?.message;
-        if (!textContent && choice?.content) textContent = choice.content;
-        const gatewayImages: Array<{ image_url: { url: string } }> = choice?.images || [];
-        for (const img of gatewayImages) {
-          const rawUrl = img.image_url?.url || "";
-          if (rawUrl) {
-            const publicUrl = await uploadImageToStorage(supabase, rawUrl, agentName, projectId);
-            imageUrls.push(publicUrl || rawUrl);
+      if (useGatewayResponses) {
+        for (const r of responses) {
+          const imageData = await r.json();
+          const choice = imageData.choices?.[0]?.message;
+          if (!textContent && choice?.content) textContent = choice.content;
+          const gatewayImages: Array<{ image_url: { url: string } }> = choice?.images || [];
+          for (const img of gatewayImages) {
+            const rawUrl = img.image_url?.url || "";
+            if (rawUrl) {
+              const publicUrl = await uploadImageToStorage(supabase, rawUrl, agentName, projectId);
+              imageUrls.push(publicUrl || rawUrl);
+            }
           }
+        }
+      } else {
+        // ── Fallback: Google AI Studio direct API (may not work in all regions) ──
+        let fallbackSuccess = false;
+        if (GOOGLE_API_KEY) {
+          const imagePrompt = buildImagePrompt(lastUserMessage.content, fullSystemPrompt, agentName);
+          const fallbackRequests = Array.from({ length: numImages }, () =>
+            generateImageViaGoogleDirect(imagePrompt, GOOGLE_API_KEY)
+          );
+          const fallbackResults = await Promise.all(fallbackRequests);
+          for (const result of fallbackResults) {
+            if (result) {
+              const publicUrl = await uploadImageToStorage(supabase, `data:${result.mimeType};base64,${result.base64}`, agentName, projectId);
+              if (publicUrl) imageUrls.push(publicUrl);
+            }
+          }
+          if (imageUrls.length > 0) {
+            fallbackSuccess = true;
+            textContent = `Aqui ${imageUrls.length === 1 ? "está o criativo gerado" : `estão os ${imageUrls.length} criativos gerados`} via Google AI! 🎨`;
+          }
+        }
+        if (!fallbackSuccess) {
+          // Both gateway and fallback failed — return friendly 402 to trigger UI toast
+          return new Response(
+            JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace Lovable em Configurações → Workspace → Usage." }),
+            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
       }
 
@@ -526,16 +668,25 @@ serve(async (req) => {
     );
 
     if (!response.ok) {
-      if (response.status === 429) {
+      if (response.status === 402 || response.status === 429) {
+        // ── Fallback: Anthropic for text generation ──────────────────
+        const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+        if (ANTHROPIC_API_KEY) {
+          console.log(`Gateway returned ${response.status}, falling back to Anthropic`);
+          const systemContent = apiMessages.find((m: { role: string }) => m.role === "system")?.content || fullSystemPrompt;
+          const userMsgs = apiMessages.filter((m: { role: string }) => m.role !== "system");
+          const fallbackStream = await generateTextViaAnthropic(systemContent, userMsgs, ANTHROPIC_API_KEY);
+          if (fallbackStream) {
+            if (userId) incrementUsage(supabase, userId, agentName, projectId, false);
+            return new Response(fallbackStream, {
+              headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+            });
+          }
+        }
+        // Both providers failed
         return new Response(
-          JSON.stringify({ error: "Limite de requisições excedido. Tente novamente." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: response.status === 402 ? "Créditos insuficientes. Adicione créditos ao workspace." : "Limite de requisições excedido. Tente novamente." }),
+          { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       const t = await response.text();
