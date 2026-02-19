@@ -20,7 +20,6 @@ const AGENT_DEPENDENCIES: Record<string, string[]> = {
   "ACO": ["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "AT-GP", "AG-IMG"],
 };
 
-// Map agent code → template token used in system prompts
 const AGENT_TO_TOKEN: Record<string, string> = {
   "AA-D100": "{{PERSONAS}}",
   "AO-GO":   "{{OFERTAS}}",
@@ -31,7 +30,6 @@ const AGENT_TO_TOKEN: Record<string, string> = {
   "AT-GP":   "{{TRAFEGO}}",
 };
 
-/** Extrai texto legível de um output salvo */
 function outputToText(out: { title?: string; output_type?: string; output_data: unknown }): string {
   const header = `[${out.title || out.output_type || "Output"}]`;
   const body = typeof out.output_data === "string"
@@ -42,18 +40,14 @@ function outputToText(out: { title?: string; output_type?: string; output_data: 
 
 // Agents that generate images
 const IMAGE_AGENTS = new Set(["AC-DC", "AG-IMG"]);
-const IMAGE_MODEL = "google/gemini-2.5-flash-image"; // Nano Banana — Lovable Gateway
 const TEXT_MODEL = "google/gemini-3-flash-preview";
+const IMAGE_MODEL = "google/gemini-2.5-flash-image"; // kept for usage log label only
 
-// ── Fallback: Google AI Studio direct API for image generation ──────────────
-// Note: gemini-2.5-flash-image via Lovable gateway is the primary path.
-// Google AI Studio direct does not support image generation in all regions.
-// This fallback attempts it anyway, silently skipping if unavailable.
+// ── Google AI Studio direct: image generation ────────────────────────────────
 async function generateImageViaGoogleDirect(
   prompt: string,
   googleApiKey: string
 ): Promise<{ base64: string; mimeType: string } | null> {
-  // gemini-2.5-flash supports image generation via AI Studio in some regions
   const model = "gemini-2.5-flash";
   try {
     const resp = await fetch(
@@ -69,7 +63,7 @@ async function generateImageViaGoogleDirect(
     );
     if (!resp.ok) {
       const errBody = await resp.text();
-      console.error(`Google direct image API error (${model}):`, resp.status, errBody);
+      console.error(`Google AI Studio image error (${model}):`, resp.status, errBody);
       return null;
     }
     const data = await resp.json();
@@ -80,7 +74,7 @@ async function generateImageViaGoogleDirect(
         return { base64: part.inlineData.data, mimeType: part.inlineData.mimeType || "image/png" };
       }
     }
-    console.warn(`Google model ${model} returned no image parts.`);
+    console.warn(`Google AI Studio returned no image parts.`);
     return null;
   } catch (e) {
     console.error(`generateImageViaGoogleDirect error:`, e);
@@ -88,7 +82,7 @@ async function generateImageViaGoogleDirect(
   }
 }
 
-// ── Fallback: Anthropic for text generation ─────────────────────────────────
+// ── Anthropic fallback for text generation ───────────────────────────────────
 async function generateTextViaAnthropic(
   systemPrompt: string,
   messages: Array<{ role: string; content: string }>,
@@ -117,7 +111,7 @@ async function generateTextViaAnthropic(
       console.error("Anthropic API error:", resp.status, await resp.text());
       return null;
     }
-    // Convert Anthropic SSE to OpenAI-compatible SSE format
+
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
@@ -140,9 +134,7 @@ async function generateTextViaAnthropic(
             try {
               const parsed = JSON.parse(jsonStr);
               if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
-                const chunk = {
-                  choices: [{ delta: { content: parsed.delta.text } }],
-                };
+                const chunk = { choices: [{ delta: { content: parsed.delta.text } }] };
                 await writer.write(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
               } else if (parsed.type === "message_stop") {
                 await writer.write(encoder.encode("data: [DONE]\n\n"));
@@ -162,7 +154,6 @@ async function generateTextViaAnthropic(
   }
 }
 
-// Plan interaction limits (fallback if plans_config unavailable)
 const PLAN_LIMITS: Record<string, number> = {
   starter: 100,
   professional: 500,
@@ -205,9 +196,6 @@ async function uploadImageToStorage(
   }
 }
 
-/**
- * Verify user's JWT and return their user_id + profile
- */
 async function getUserFromAuth(
   supabase: ReturnType<typeof createClient>,
   authHeader: string | null
@@ -227,9 +215,6 @@ async function getUserFromAuth(
   return { userId, profile: profile || {} };
 }
 
-/**
- * Increment interactions_used for the user profile
- */
 async function incrementUsage(
   supabase: ReturnType<typeof createClient>,
   userId: string,
@@ -238,21 +223,11 @@ async function incrementUsage(
   isImage = false
 ): Promise<void> {
   const field = isImage ? "creatives_used" : "interactions_used";
-
-  // Increment the counter via RPC (try/catch — .catch() not supported on PostgrestBuilder in Deno)
   try {
-    await supabase.rpc("increment_profile_usage", {
-      _user_id: userId,
-      _field: field,
-    });
+    await supabase.rpc("increment_profile_usage", { _user_id: userId, _field: field });
   } catch {
-    // Fallback: manual increment
     try {
-      const { data } = await supabase
-        .from("profiles")
-        .select(field)
-        .eq("user_id", userId)
-        .single();
+      const { data } = await supabase.from("profiles").select(field).eq("user_id", userId).single();
       if (data) {
         await supabase
           .from("profiles")
@@ -263,8 +238,6 @@ async function incrementUsage(
       console.error("incrementUsage fallback error:", e);
     }
   }
-
-  // Log usage (fire-and-forget, don't block the response)
   supabase.from("usage_logs").insert({
     user_id: userId,
     project_id: projectId || null,
@@ -281,7 +254,7 @@ serve(async (req) => {
 
   try {
     const { messages, agentName, projectId, projectContext, imageCount } = await req.json();
-    const numImages = Math.min(Math.max(Number(imageCount) || 1, 1), 4); // clamp 1-4
+    const numImages = Math.min(Math.max(Number(imageCount) || 1, 1), 4);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
@@ -290,7 +263,7 @@ serve(async (req) => {
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // ── Auth: get user from JWT ─────────────────────────────────────
+    // ── Auth ────────────────────────────────────────────────────────
     const authHeader = req.headers.get("Authorization");
     let userId: string | null = null;
     let userProfile: Record<string, unknown> = {};
@@ -308,7 +281,6 @@ serve(async (req) => {
       const limitField = isImage ? "creatives_limit" : "interactions_limit";
       const used = (userProfile[usedField] as number) ?? 0;
       const rawLimit = (userProfile[limitField] as number);
-      // Only enforce limit if we have a real profile with a positive limit
       const limit = rawLimit > 0 ? rawLimit : (PLAN_LIMITS[(userProfile.plan as string) || "starter"] ?? 100);
 
       if (limit > 0 && used >= limit) {
@@ -323,7 +295,7 @@ serve(async (req) => {
       }
     }
 
-    // ── 1. Fetch active system prompt ──────────────────────────────
+    // ── 1. System prompt ────────────────────────────────────────────
     const { data: promptRow } = await supabase
       .from("agent_prompts")
       .select("system_prompt")
@@ -339,7 +311,7 @@ serve(async (req) => {
         ? "Você é um agente especialista em criação de imagens publicitárias de alta definição."
         : "Você é um assistente de IA útil. Responda em português brasileiro.");
 
-    // ── 2. Fetch knowledge base ────────────────────────────────────
+    // ── 2. Knowledge base ───────────────────────────────────────────
     let knowledgeContext = "";
     const { data: kbItems } = await supabase
       .from("knowledge_base")
@@ -355,8 +327,7 @@ serve(async (req) => {
       knowledgeContext += "\n--- FIM DA BASE ---\n";
     }
 
-    // ── 3. Fetch approved outputs from dependency agents ───────────
-    // Agrupa outputs por agente e interpola tokens {{XYZ}} no system prompt
+    // ── 3. Dependency outputs / token interpolation ─────────────────
     const tokenValues: Record<string, string> = {};
 
     if (projectId) {
@@ -371,36 +342,28 @@ serve(async (req) => {
           .order("created_at", { ascending: false });
 
         if (outputs && outputs.length > 0) {
-          // Agrupar por agente (pegar o mais recente de cada)
           const byAgent: Record<string, string[]> = {};
           for (const out of outputs) {
             if (!byAgent[out.agent_name]) byAgent[out.agent_name] = [];
             byAgent[out.agent_name].push(outputToText(out));
           }
-
-          // Preencher mapa de tokens
           for (const [agentCode, texts] of Object.entries(byAgent)) {
             const token = AGENT_TO_TOKEN[agentCode];
-            if (token) {
-              tokenValues[token] = texts.join("\n\n");
-            }
+            if (token) tokenValues[token] = texts.join("\n\n");
           }
         }
       }
     }
 
-    // Tokens sem dados disponíveis → substituir por mensagem informativa
-    const allTokens = Object.values(AGENT_TO_TOKEN);
-    for (const token of allTokens) {
+    for (const token of Object.values(AGENT_TO_TOKEN)) {
       if (!tokenValues[token]) {
-        tokenValues[token] = `[Nenhum output aprovado disponível para este contexto. O usuário ainda não executou ou aprovou o agente responsável por este dado.]`;
+        tokenValues[token] = `[Nenhum output aprovado disponível para este contexto.]`;
       }
     }
-    // ── 3b. {{META_ADS_DATA}} — busca dados reais para o AT-GP ───────
+
+    // ── 3b. Meta Ads data for AT-GP ─────────────────────────────────
     if (agentName === "AT-GP" && projectId) {
       let metaAdsText = "";
-
-      // Buscar status da conexão
       const { data: conn } = await supabase
         .from("meta_ads_connections")
         .select("ad_account_id, page_id, pixel_id, instagram_account_id, connection_status, last_sync_at")
@@ -409,14 +372,12 @@ serve(async (req) => {
         .maybeSingle();
 
       if (conn) {
-        metaAdsText += `CONTA META ADS CONECTADA:\n`;
-        metaAdsText += `- Ad Account ID: ${conn.ad_account_id}\n`;
+        metaAdsText += `CONTA META ADS CONECTADA:\n- Ad Account ID: ${conn.ad_account_id}\n`;
         if (conn.page_id)              metaAdsText += `- Page ID: ${conn.page_id}\n`;
         if (conn.pixel_id)             metaAdsText += `- Pixel ID: ${conn.pixel_id}\n`;
         if (conn.instagram_account_id) metaAdsText += `- Instagram Account ID: ${conn.instagram_account_id}\n`;
         if (conn.last_sync_at)         metaAdsText += `- Última sincronização: ${new Date(conn.last_sync_at).toLocaleString("pt-BR")}\n`;
 
-        // Buscar cache de dados (campanhas, insights, etc.)
         const { data: cacheItems } = await supabase
           .from("meta_ads_cache")
           .select("data_type, data, synced_at")
@@ -425,32 +386,30 @@ serve(async (req) => {
           .order("synced_at", { ascending: false });
 
         if (cacheItems && cacheItems.length > 0) {
-          metaAdsText += `\nDADOS EM CACHE (sincronizados recentemente):\n`;
+          metaAdsText += `\nDADOS EM CACHE:\n`;
           for (const item of cacheItems) {
-            metaAdsText += `\n### ${item.data_type.toUpperCase()} (sync: ${new Date(item.synced_at).toLocaleString("pt-BR")}):\n`;
-            // Limitar tamanho para não explodir o contexto
+            metaAdsText += `\n### ${item.data_type.toUpperCase()}:\n`;
             const raw = typeof item.data === "string" ? item.data : JSON.stringify(item.data, null, 2);
             metaAdsText += raw.slice(0, 3000);
-            if (raw.length > 3000) metaAdsText += "\n[... dados truncados para economizar contexto]";
+            if (raw.length > 3000) metaAdsText += "\n[... truncado]";
             metaAdsText += "\n";
           }
         } else {
-          metaAdsText += `\nNenhum cache de campanhas disponível ainda. Sugira ao usuário clicar em "Sincronizar" na integração Meta Ads para carregar os dados.`;
+          metaAdsText += `\nNenhum cache disponível. Sugira ao usuário clicar em "Sincronizar".`;
         }
       } else {
-        metaAdsText = "Conta Meta Ads NÃO conectada a este projeto. Para acessar dados reais de campanhas, peça ao usuário que conecte a conta em Configurações → Integrações → Meta Ads.";
+        metaAdsText = "Conta Meta Ads NÃO conectada a este projeto.";
       }
-
       tokenValues["{{META_ADS_DATA}}"] = metaAdsText;
     } else {
-      // Tokens extras do AT-GP que não vêm de agentes
-      tokenValues["{{META_ADS_DATA}}"] = "[Nenhum dado de Meta Ads conectado. Peça ao usuário para conectar a conta na aba de integrações.]";
+      tokenValues["{{META_ADS_DATA}}"] = "[Meta Ads não conectado.]";
     }
-    // ── 3c. {{DEMANDAS}} — demandas pendentes de/para AT-GP ─────────
+
+    // ── 3c. Demandas pendentes para AT-GP ───────────────────────────
     if (agentName === "AT-GP" && projectId) {
       const { data: demands } = await supabase
         .from("agent_demands")
-        .select("from_agent, to_agent, demand_type, reason, suggestion, priority, status, created_at")
+        .select("from_agent, to_agent, demand_type, reason, suggestion, priority")
         .eq("project_id", projectId)
         .eq("status", "pending")
         .order("created_at", { ascending: false })
@@ -465,30 +424,28 @@ serve(async (req) => {
         }
         tokenValues["{{DEMANDAS}}"] = demandasText;
       } else {
-        tokenValues["{{DEMANDAS}}"] = "[Nenhuma demanda pendente no momento.]";
+        tokenValues["{{DEMANDAS}}"] = "[Nenhuma demanda pendente.]";
       }
     } else {
-      tokenValues["{{DEMANDAS}}"] = "[Nenhuma demanda pendente no momento.]";
+      tokenValues["{{DEMANDAS}}"] = "[Nenhuma demanda pendente.]";
     }
 
-
-    // ── 4. Build project context note ─────────────────────────────
+    // ── 4. Project context ──────────────────────────────────────────
     const projectInfo = projectContext
       ? `Nicho: ${projectContext.nicho || "não informado"} | Público-alvo: ${projectContext.publico_alvo || "não informado"} | Objetivo: ${projectContext.objetivo || "não informado"} | Faturamento: ${projectContext.faturamento || "não informado"} | Produto: ${projectContext.product_description || "não informado"}`
       : "Informações do projeto não disponíveis.";
-
     tokenValues["{{PROJETO_INFO}}"] = projectInfo;
 
-    // ── 5. Interpolar todos os tokens no system prompt ─────────────
+    // ── 5. Interpolate tokens ───────────────────────────────────────
     let interpolatedPrompt = systemPrompt;
     for (const [token, value] of Object.entries(tokenValues)) {
       interpolatedPrompt = interpolatedPrompt.replaceAll(token, value);
     }
-
     const fullSystemPrompt = interpolatedPrompt + knowledgeContext;
 
     // ═══════════════════════════════════════════════════════════════
-    // AC-DC / AG-IMG: Image Generation
+    // AC-DC / AG-IMG: Image Generation — Google AI Studio (primary)
+    // Lovable AI gateway is NOT used for image generation.
     // ═══════════════════════════════════════════════════════════════
     if (IMAGE_AGENTS.has(agentName)) {
       const lastUserMessage = messages
@@ -502,54 +459,7 @@ serve(async (req) => {
         );
       }
 
-      const imageMessages = [
-        {
-          role: "user",
-          content: buildImagePrompt(lastUserMessage.content, fullSystemPrompt, agentName),
-        },
-      ];
-
-      console.log(`${agentName}: generating ${numImages} image(s) for: ${lastUserMessage.content.slice(0, 100)}`);
-
-      const imageAbort = new AbortController();
-      const imageTimeout = setTimeout(() => imageAbort.abort(), 55000);
-
-      // Fire N requests in parallel (one per variation)
-      const requests = Array.from({ length: numImages }, () =>
-        fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: IMAGE_MODEL,
-            messages: imageMessages,
-            modalities: ["image", "text"],
-          }),
-          signal: imageAbort.signal,
-        })
-      );
-
-      let responses: Response[];
-      try {
-        responses = await Promise.all(requests);
-      } catch (fetchErr) {
-        clearTimeout(imageTimeout);
-        const isTimeout = fetchErr instanceof Error && fetchErr.name === "AbortError";
-        return new Response(
-          JSON.stringify({
-            error: isTimeout
-              ? "A geração de imagem excedeu o tempo limite. Tente uma descrição mais simples."
-              : "Erro ao conectar com o serviço de geração de imagens.",
-          }),
-          { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      clearTimeout(imageTimeout);
-
-      // Check for errors in any response — on 402/429, try Google direct fallback
-      // Priority: Supabase secret → api_configs table (admin-configured)
+      // Resolve GOOGLE_API_KEY: Supabase env secret → api_configs table
       let GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY") || null;
       if (!GOOGLE_API_KEY) {
         const { data: googleCfg } = await supabase
@@ -560,77 +470,63 @@ serve(async (req) => {
           .maybeSingle();
         if (googleCfg?.key_value) GOOGLE_API_KEY = googleCfg.key_value;
       }
-      let useGatewayResponses = true;
 
-      for (const r of responses) {
-        if (!r.ok) {
-          if (r.status === 402 || r.status === 429) {
-            useGatewayResponses = false;
-            console.log(`Gateway returned ${r.status}, falling back to Google AI Studio direct API`);
-            break;
-          }
-          const errText = await r.text();
-          console.error("Image API error:", r.status, errText);
-          return new Response(
-            JSON.stringify({ error: "Erro ao gerar imagem" }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
+      if (!GOOGLE_API_KEY) {
+        return new Response(
+          JSON.stringify({ error: "GOOGLE_API_KEY não configurada. Acesse o painel admin → Configurações → APIs." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
-      // Parse all responses
-      let textContent = "";
+      console.log(`${agentName}: generating ${numImages} image(s) via Google AI Studio`);
+
+      const imagePrompt = buildImagePrompt(lastUserMessage.content, fullSystemPrompt, agentName);
+
+      const imageAbort = new AbortController();
+      const imageTimeout = setTimeout(() => imageAbort.abort(), 55000);
+
+      let googleResults: Array<{ base64: string; mimeType: string } | null>;
+      try {
+        const gRequests = Array.from({ length: numImages }, () =>
+          generateImageViaGoogleDirect(imagePrompt, GOOGLE_API_KEY!)
+        );
+        googleResults = await Promise.all(gRequests);
+      } catch (fetchErr) {
+        clearTimeout(imageTimeout);
+        const isTimeout = fetchErr instanceof Error && fetchErr.name === "AbortError";
+        return new Response(
+          JSON.stringify({
+            error: isTimeout
+              ? "A geração de imagem excedeu o tempo limite. Tente uma descrição mais simples."
+              : "Erro ao conectar com o Google AI Studio.",
+          }),
+          { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      clearTimeout(imageTimeout);
+
       const imageUrls: string[] = [];
-
-      if (useGatewayResponses) {
-        for (const r of responses) {
-          const imageData = await r.json();
-          const choice = imageData.choices?.[0]?.message;
-          if (!textContent && choice?.content) textContent = choice.content;
-          const gatewayImages: Array<{ image_url: { url: string } }> = choice?.images || [];
-          for (const img of gatewayImages) {
-            const rawUrl = img.image_url?.url || "";
-            if (rawUrl) {
-              const publicUrl = await uploadImageToStorage(supabase, rawUrl, agentName, projectId);
-              imageUrls.push(publicUrl || rawUrl);
-            }
-          }
-        }
-      } else {
-        // ── Fallback: Google AI Studio direct API (may not work in all regions) ──
-        let fallbackSuccess = false;
-        if (GOOGLE_API_KEY) {
-          const imagePrompt = buildImagePrompt(lastUserMessage.content, fullSystemPrompt, agentName);
-          const fallbackRequests = Array.from({ length: numImages }, () =>
-            generateImageViaGoogleDirect(imagePrompt, GOOGLE_API_KEY)
+      for (const result of googleResults) {
+        if (result) {
+          const publicUrl = await uploadImageToStorage(
+            supabase,
+            `data:${result.mimeType};base64,${result.base64}`,
+            agentName,
+            projectId
           );
-          const fallbackResults = await Promise.all(fallbackRequests);
-          for (const result of fallbackResults) {
-            if (result) {
-              const publicUrl = await uploadImageToStorage(supabase, `data:${result.mimeType};base64,${result.base64}`, agentName, projectId);
-              if (publicUrl) imageUrls.push(publicUrl);
-            }
-          }
-          if (imageUrls.length > 0) {
-            fallbackSuccess = true;
-            textContent = `Aqui ${imageUrls.length === 1 ? "está o criativo gerado" : `estão os ${imageUrls.length} criativos gerados`} via Google AI! 🎨`;
-          }
-        }
-        if (!fallbackSuccess) {
-          // Both gateway and fallback failed — return friendly 402 to trigger UI toast
-          const reason = GOOGLE_API_KEY
-            ? "Falha ao gerar imagem. A chave Google AI pode ser inválida ou a geração de imagens não está disponível na sua região."
-            : "Créditos insuficientes. Adicione créditos ao workspace Lovable em Configurações → Workspace → Usage.";
-          return new Response(
-            JSON.stringify({ error: reason }),
-            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          if (publicUrl) imageUrls.push(publicUrl);
         }
       }
 
-      console.log(`${agentName}: got ${imageUrls.length} image(s) total`);
+      if (imageUrls.length === 0) {
+        return new Response(
+          JSON.stringify({ error: "Falha ao gerar imagem via Google AI Studio. Verifique se a chave é válida e se a geração de imagens está disponível na sua conta." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
-      // Increment creatives usage (count = numImages)
+      console.log(`${agentName}: got ${imageUrls.length} image(s) from Google AI Studio`);
+
       if (userId) {
         for (let i = 0; i < numImages; i++) {
           await incrementUsage(supabase, userId, agentName, projectId, true);
@@ -640,7 +536,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           type: "image_result",
-          text: textContent || `Aqui ${numImages === 1 ? "está o criativo gerado" : `estão os ${numImages} criativos gerados`}! 🎨`,
+          text: `Aqui ${imageUrls.length === 1 ? "está o criativo gerado" : `estão os ${imageUrls.length} criativos gerados`} via Google AI Studio! 🎨`,
           images: imageUrls,
         }),
         {
@@ -654,7 +550,8 @@ serve(async (req) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // All other agents: Streaming text response
+    // All other agents: Streaming text via Lovable AI Gateway
+    // Fallback: Anthropic on 402/429
     // ═══════════════════════════════════════════════════════════════
     const apiMessages = [
       { role: "system", content: fullSystemPrompt },
@@ -664,25 +561,21 @@ serve(async (req) => {
       })),
     ];
 
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: TEXT_MODEL,
-          messages: apiMessages,
-          stream: true,
-        }),
-      }
-    );
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: TEXT_MODEL,
+        messages: apiMessages,
+        stream: true,
+      }),
+    });
 
     if (!response.ok) {
       if (response.status === 402 || response.status === 429) {
-        // ── Fallback: Anthropic for text generation ──────────────────
         const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
         if (ANTHROPIC_API_KEY) {
           console.log(`Gateway returned ${response.status}, falling back to Anthropic`);
@@ -696,7 +589,6 @@ serve(async (req) => {
             });
           }
         }
-        // Both providers failed
         return new Response(
           JSON.stringify({ error: response.status === 402 ? "Créditos insuficientes. Adicione créditos ao workspace." : "Limite de requisições excedido. Tente novamente." }),
           { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -710,7 +602,6 @@ serve(async (req) => {
       );
     }
 
-    // Increment interactions usage (fire-and-forget)
     if (userId) {
       incrementUsage(supabase, userId, agentName, projectId, false);
     }
@@ -721,13 +612,8 @@ serve(async (req) => {
   } catch (e) {
     console.error("agent-chat error:", e);
     return new Response(
-      JSON.stringify({
-        error: e instanceof Error ? e.message : "Erro desconhecido",
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({ error: e instanceof Error ? e.message : "Erro desconhecido" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
