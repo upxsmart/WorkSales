@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 
+
 type AgentOutput = {
   id: string;
   agent_name: string;
@@ -297,6 +298,25 @@ const AgentChat = () => {
     setInput(`Refine e melhore o seguinte output:\n\n${content.slice(0, 500)}...`);
   }, []);
 
+  /** Regenera a última imagem usando o mesmo prompt do usuário anterior à mensagem i */
+  const handleRegenerate = useCallback((msgIndex: number) => {
+    if (isLoading || !agentCode) return;
+    // Find the user message right before this assistant message
+    const userMsg = messages
+      .slice(0, msgIndex)
+      .filter(m => m.role === "user")
+      .pop();
+    if (!userMsg) return;
+    sendMessage(
+      userMsg.content,
+      agentCode,
+      projectId || undefined,
+      project || undefined,
+      undefined,
+      imageCount
+    );
+  }, [isLoading, agentCode, messages, sendMessage, projectId, project, imageCount]);
+
   const handleExport = useCallback((content: string) => {
     const blob = new Blob([content], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
@@ -465,45 +485,59 @@ const AgentChat = () => {
                                         alt={`Criativo ${imgIdx + 1}`}
                                         className="w-full object-cover"
                                       />
-                                      {/* Download overlay */}
-                                      <div className="absolute inset-0 bg-background/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                        {isBase64 ? (
-                                          <button
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              // Convert base64 to blob and download
-                                              const [header, data] = url.split(",");
-                                              const mime = header.match(/:(.*?);/)?.[1] || "image/png";
-                                              const binary = atob(data);
-                                              const arr = new Uint8Array(binary.length);
-                                              for (let j = 0; j < binary.length; j++) arr[j] = binary.charCodeAt(j);
-                                              const blob = new Blob([arr], { type: mime });
-                                              const blobUrl = URL.createObjectURL(blob);
-                                              const a = document.createElement("a");
-                                              a.href = blobUrl;
-                                              a.download = `criativo-${agentCode}-${imgIdx + 1}.png`;
-                                              a.click();
-                                              URL.revokeObjectURL(blobUrl);
-                                            }}
-                                          >
-                                            <Download className="w-3 h-3" />
-                                            Baixar
-                                          </button>
-                                        ) : (
-                                          <a
-                                            href={url}
-                                            download={`criativo-${agentCode}-${imgIdx + 1}.png`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium"
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <Download className="w-3 h-3" />
-                                            Baixar
-                                          </a>
-                                        )}
-                                      </div>
+                                       {/* Download + Regenerar overlay */}
+                                       <div className="absolute inset-0 bg-background/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                         {isBase64 ? (
+                                           <button
+                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium"
+                                             onClick={(e) => {
+                                               e.stopPropagation();
+                                               const [header, data] = url.split(",");
+                                               const mime = header.match(/:(.*?);/)?.[1] || "image/png";
+                                               const binary = atob(data);
+                                               const arr = new Uint8Array(binary.length);
+                                               for (let j = 0; j < binary.length; j++) arr[j] = binary.charCodeAt(j);
+                                               const blob = new Blob([arr], { type: mime });
+                                               const blobUrl = URL.createObjectURL(blob);
+                                               const a = document.createElement("a");
+                                               a.href = blobUrl;
+                                               a.download = `criativo-${agentCode}-${imgIdx + 1}.png`;
+                                               a.click();
+                                               URL.revokeObjectURL(blobUrl);
+                                             }}
+                                           >
+                                             <Download className="w-3 h-3" />
+                                             Baixar
+                                           </button>
+                                         ) : (
+                                           <a
+                                             href={url}
+                                             download={`criativo-${agentCode}-${imgIdx + 1}.png`}
+                                             target="_blank"
+                                             rel="noopener noreferrer"
+                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium"
+                                             onClick={(e) => e.stopPropagation()}
+                                           >
+                                             <Download className="w-3 h-3" />
+                                             Baixar
+                                           </a>
+                                         )}
+                                         {/* Regenerar — only on last assistant message */}
+                                         {i === messages.length - 1 && (agentCode === "AG-IMG" || agentCode === "AC-DC") && (
+                                           <button
+                                             disabled={isLoading}
+                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium disabled:opacity-50"
+                                             onClick={(e) => {
+                                               e.stopPropagation();
+                                               handleRegenerate(i);
+                                             }}
+                                             title="Gerar nova variação com o mesmo prompt"
+                                           >
+                                             <RefreshCw className="w-3 h-3" />
+                                             Regenerar
+                                           </button>
+                                         )}
+                                       </div>
                                     </motion.div>
                                   </AnimatePresence>
                                 );
@@ -515,31 +549,48 @@ const AgentChat = () => {
                     ) : (
                       <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                     )}
-                    {msg.role === "assistant" && !isLoading && i === messages.length - 1 && i > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border/50">
-                        <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleApproveOutput(msg.content)}>
-                          <Check className="w-3 h-3 mr-1" /> Aprovar
-                        </Button>
-                        <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleRefine(msg.content)}>
-                          <RefreshCw className="w-3 h-3 mr-1" /> Refinar
-                        </Button>
-                        <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleExport(msg.content)}>
-                          <Download className="w-3 h-3 mr-1" /> Exportar
-                        </Button>
-                        {agentCode === "AC-DC" && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-xs h-7 text-primary/70 hover:text-primary hover:bg-primary/10"
-                            onClick={() => handleSendToAgImg(msg.content)}
-                            title="Abre o AG-IMG com este briefing pré-preenchido"
-                          >
-                            <ExternalLink className="w-3 h-3 mr-1" />
-                            Enviar para AG-IMG
-                          </Button>
-                        )}
-                      </div>
-                    )}
+                     {msg.role === "assistant" && !isLoading && i === messages.length - 1 && i > 0 && (
+                       <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border/50">
+                         {/* Regenerar — only for image agents with images */}
+                         {(agentCode === "AG-IMG" || agentCode === "AC-DC") && msg.images && msg.images.length > 0 ? (
+                           <Button
+                             size="sm"
+                             variant="ghost"
+                             className="text-xs h-7 text-primary/80 hover:text-primary hover:bg-primary/10"
+                             disabled={isLoading}
+                             onClick={() => handleRegenerate(i)}
+                             title="Gerar nova variação com o mesmo prompt"
+                           >
+                             <RefreshCw className="w-3 h-3 mr-1" />
+                             Regenerar
+                           </Button>
+                         ) : (
+                           <>
+                             <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleApproveOutput(msg.content)}>
+                               <Check className="w-3 h-3 mr-1" /> Aprovar
+                             </Button>
+                             <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleRefine(msg.content)}>
+                               <RefreshCw className="w-3 h-3 mr-1" /> Refinar
+                             </Button>
+                             <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleExport(msg.content)}>
+                               <Download className="w-3 h-3 mr-1" /> Exportar
+                             </Button>
+                           </>
+                         )}
+                         {agentCode === "AC-DC" && (
+                           <Button
+                             size="sm"
+                             variant="ghost"
+                             className="text-xs h-7 text-primary/70 hover:text-primary hover:bg-primary/10"
+                             onClick={() => handleSendToAgImg(msg.content)}
+                             title="Abre o AG-IMG com este briefing pré-preenchido"
+                           >
+                             <ExternalLink className="w-3 h-3 mr-1" />
+                             Enviar para AG-IMG
+                           </Button>
+                         )}
+                       </div>
+                     )}
                   </div>
                   {msg.role === "user" && (
                     <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0 mt-1">
