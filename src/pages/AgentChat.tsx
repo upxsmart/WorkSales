@@ -145,7 +145,7 @@ const AgentChat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Save messages after assistant finishes
+  // Save messages after assistant finishes + auto-save image outputs to gallery
   useEffect(() => {
     if (isLoading || !projectId || !agentCode || messages.length < 2) return;
     const lastMsg = messages[messages.length - 1];
@@ -156,23 +156,51 @@ const AgentChat = () => {
         const assistantContent = lastMsg.images?.length
           ? JSON.stringify({ text: lastMsg.content, images: lastMsg.images })
           : lastMsg.content;
-        Promise.all([
-          supabase.from("chat_messages").insert({
+
+        // Save chat messages (fire-and-forget, no Promise.all — PostgrestBuilder isn't a native Promise)
+        void supabase.from("chat_messages").insert({
+          project_id: projectId,
+          agent_name: agentCode,
+          role: "user",
+          content: userMsg.content,
+        });
+        void supabase.from("chat_messages").insert({
+          project_id: projectId,
+          agent_name: agentCode,
+          role: "assistant",
+          content: assistantContent,
+        });
+
+        // Auto-save images to agent_outputs (approved) so they appear in the gallery
+        if (lastMsg.images && lastMsg.images.length > 0 && (agentCode === "AG-IMG" || agentCode === "AC-DC")) {
+          const formatLabel = selectedFormat?.label || "Criativo";
+          void supabase.from("agent_outputs").insert({
             project_id: projectId,
             agent_name: agentCode,
-            role: "user",
-            content: userMsg.content,
-          }),
-          supabase.from("chat_messages").insert({
-            project_id: projectId,
-            agent_name: agentCode,
-            role: "assistant",
-            content: assistantContent,
-          }),
-        ]);
+            output_type: "image",
+            title: `${agentCode} · ${formatLabel} · ${new Date().toLocaleDateString("pt-BR")}`,
+            output_data: {
+              images: lastMsg.images,
+              text: lastMsg.content,
+              format: selectedFormat,
+              prompt: userMsg.content,
+            },
+            is_approved: true,
+            version: outputs.length + 1,
+          }).then(() => {
+            // Reload outputs list after saving
+            supabase
+              .from("agent_outputs")
+              .select("*")
+              .eq("project_id", projectId)
+              .eq("agent_name", agentCode)
+              .order("created_at", { ascending: false })
+              .then(({ data }) => { if (data) setOutputs(data as AgentOutput[]); });
+          });
+        }
       }
     }
-  }, [isLoading, messages, projectId, agentCode]);
+  }, [isLoading, messages, projectId, agentCode, selectedFormat, outputs.length]);
 
   // Save AT-GP demands found in response to agent_demands table
   const handleDemandsFound = useCallback(async (demands: AgentDemand[], _fullText: string) => {
