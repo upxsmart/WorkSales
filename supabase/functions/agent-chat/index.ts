@@ -44,14 +44,22 @@ const TEXT_MODEL = "google/gemini-3-flash-preview";
 const IMAGE_MODEL = "google/gemini-2.5-flash-image"; // kept for usage log label only
 
 // ── Google AI Studio direct: image generation ────────────────────────────────
+// gemini-2.0-flash-exp is the correct model for image generation via Google AI Studio
+// gemini-2.5-flash does NOT support image output (text only)
+const GOOGLE_IMAGE_MODELS = [
+  "gemini-2.0-flash-exp",          // primary: supports IMAGE responseModality
+  "imagen-3.0-generate-002",       // fallback: Imagen 3 dedicated image model
+];
+
 async function generateImageViaGoogleDirect(
   prompt: string,
   googleApiKey: string
 ): Promise<{ base64: string; mimeType: string } | null> {
-  const model = "gemini-2.5-flash";
+  // Try gemini-2.0-flash-exp first (generateContent with responseModalities)
+  const geminiModel = GOOGLE_IMAGE_MODELS[0];
   try {
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${googleApiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${googleApiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -61,25 +69,57 @@ async function generateImageViaGoogleDirect(
         }),
       }
     );
-    if (!resp.ok) {
-      const errBody = await resp.text();
-      console.error(`Google AI Studio image error (${model}):`, resp.status, errBody);
-      return null;
-    }
-    const data = await resp.json();
-    const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> =
-      data?.candidates?.[0]?.content?.parts || [];
-    for (const part of parts) {
-      if (part.inlineData?.data) {
-        return { base64: part.inlineData.data, mimeType: part.inlineData.mimeType || "image/png" };
+    if (resp.ok) {
+      const data = await resp.json();
+      const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> =
+        data?.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData?.data) {
+          console.log(`Google AI Studio image generated via ${geminiModel}`);
+          return { base64: part.inlineData.data, mimeType: part.inlineData.mimeType || "image/png" };
+        }
       }
+      console.warn(`${geminiModel} returned no image parts. Trying Imagen...`);
+    } else {
+      const errBody = await resp.text();
+      console.error(`Google AI Studio image error (${geminiModel}):`, resp.status, errBody);
     }
-    console.warn(`Google AI Studio returned no image parts.`);
-    return null;
   } catch (e) {
-    console.error(`generateImageViaGoogleDirect error:`, e);
-    return null;
+    console.error(`generateImageViaGoogleDirect (${geminiModel}) error:`, e);
   }
+
+  // Fallback: Imagen 3 via predict endpoint
+  const imagenModel = GOOGLE_IMAGE_MODELS[1];
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${imagenModel}:predict?key=${googleApiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instances: [{ prompt }],
+          parameters: { sampleCount: 1 },
+        }),
+      }
+    );
+    if (resp.ok) {
+      const data = await resp.json();
+      const b64 = data?.predictions?.[0]?.bytesBase64Encoded;
+      const mime = data?.predictions?.[0]?.mimeType || "image/png";
+      if (b64) {
+        console.log(`Google AI Studio image generated via ${imagenModel}`);
+        return { base64: b64, mimeType: mime };
+      }
+      console.warn(`${imagenModel} returned no image data.`);
+    } else {
+      const errBody = await resp.text();
+      console.error(`Google AI Studio image error (${imagenModel}):`, resp.status, errBody);
+    }
+  } catch (e) {
+    console.error(`generateImageViaGoogleDirect (${imagenModel}) error:`, e);
+  }
+
+  return null;
 }
 
 // ── Anthropic fallback for text generation ───────────────────────────────────
