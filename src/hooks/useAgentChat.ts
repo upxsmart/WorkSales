@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 export type Message = {
   role: "user" | "assistant";
@@ -76,11 +77,15 @@ export function useAgentChat() {
       setIsLoading(true);
 
       try {
+        // Get the current user's JWT (not the anon key)
+        const { data: { session } } = await supabase.auth.getSession();
+        const authToken = session?.access_token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
         const resp = await fetch(CHAT_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${authToken}`,
           },
           body: JSON.stringify({
             messages: allMessages,

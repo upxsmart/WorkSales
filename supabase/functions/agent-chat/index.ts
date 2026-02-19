@@ -181,15 +181,16 @@ serve(async (req) => {
     }
 
     // ── Usage limit check ───────────────────────────────────────────
-    if (userId && userProfile) {
+    if (userId && userProfile && Object.keys(userProfile).length > 0) {
       const isImage = IMAGE_AGENTS.has(agentName);
       const usedField = isImage ? "creatives_used" : "interactions_used";
       const limitField = isImage ? "creatives_limit" : "interactions_limit";
-      const used = (userProfile[usedField] as number) || 0;
-      const limit = (userProfile[limitField] as number) ||
-        PLAN_LIMITS[(userProfile.plan as string) || "starter"] || 100;
+      const used = (userProfile[usedField] as number) ?? 0;
+      const rawLimit = (userProfile[limitField] as number);
+      // Only enforce limit if we have a real profile with a positive limit
+      const limit = rawLimit > 0 ? rawLimit : (PLAN_LIMITS[(userProfile.plan as string) || "starter"] ?? 100);
 
-      if (used >= limit) {
+      if (limit > 0 && used >= limit) {
         return new Response(
           JSON.stringify({
             error: isImage
