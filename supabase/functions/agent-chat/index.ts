@@ -41,65 +41,121 @@ function outputToText(out: { title?: string; output_type?: string; output_data: 
 // Agents that generate images
 const IMAGE_AGENTS = new Set(["AC-DC", "AG-IMG"]);
 const TEXT_MODEL = "google/gemini-3-flash-preview";
-const IMAGE_MODEL = "google/gemini-2.5-flash-image"; // kept for usage log label only
+const IMAGE_MODEL_PRIMARY = "google/gemini-3-pro-image-preview";
+const IMAGE_MODEL_FALLBACK = "gemini-2.5-flash-image";
 
-// ── Image generation via Google AI Studio direct (GOOGLE_API_KEY) ─────────────
-const GOOGLE_IMAGE_MODELS = [
-  "gemini-3-pro-image-preview",       // Gemini 3 Pro Image Preview — primary
-  "gemini-2.5-flash-image",           // Nano Banana — fallback
-];
+// ── Image generation via Lovable AI Gateway (primary) ─────────────────────────
+async function generateImageViaGateway(
+  prompt: string,
+  lovableApiKey: string
+): Promise<{ base64: string; mimeType: string } | null> {
+  try {
+    console.log(`Trying Lovable AI Gateway model: ${IMAGE_MODEL_PRIMARY}`);
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: IMAGE_MODEL_PRIMARY,
+        messages: [{ role: "user", content: prompt }],
+        modalities: ["image", "text"],
+      }),
+    });
 
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error(`Lovable Gateway image error (${resp.status}):`, errText);
+      return null;
+    }
+
+    const data = await resp.json();
+    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url as string | undefined;
+
+    if (imageUrl) {
+      console.log(`Image generated successfully via Lovable Gateway (${IMAGE_MODEL_PRIMARY})`);
+      // Extract base64 from data URL
+      const match = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        return { base64: match[2], mimeType: match[1] };
+      }
+      // If it's a regular URL, fetch and convert
+      const imgResp = await fetch(imageUrl);
+      if (imgResp.ok) {
+        const buf = await imgResp.arrayBuffer();
+        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        return { base64: b64, mimeType: imgResp.headers.get("content-type") || "image/png" };
+      }
+    }
+
+    console.warn(`Lovable Gateway returned no image data for ${IMAGE_MODEL_PRIMARY}`);
+    return null;
+  } catch (e) {
+    console.error(`generateImageViaGateway error:`, e);
+    return null;
+  }
+}
+
+// ── Image generation via Google AI Studio direct (fallback) ───────────────────
 async function generateImageViaGoogleDirect(
   prompt: string,
   googleApiKey: string
 ): Promise<{ base64: string; mimeType: string } | null> {
-  for (const model of GOOGLE_IMAGE_MODELS) {
-    try {
-      console.log(`Trying Google AI Studio model: ${model}`);
-
-      // gemini-3-pro-image-preview requires IMAGE-only modality
-      const modalities = model.includes("gemini-3-pro")
-        ? ["IMAGE"]
-        : ["TEXT", "IMAGE"];
-
-      const bodyPayload: Record<string, unknown> = {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: modalities,
+  try {
+    console.log(`Trying Google AI Studio fallback model: ${IMAGE_MODEL_FALLBACK}`);
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL_FALLBACK}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": googleApiKey,
         },
-      };
-
-      const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": googleApiKey,
-          },
-          body: JSON.stringify(bodyPayload),
-        }
-      );
-      if (!resp.ok) {
-        const errText = await resp.text();
-        console.error(`Google AI Studio error (${model}): ${resp.status}`, errText);
-        continue;
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+        }),
       }
-      const data = await resp.json();
-      const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> =
-        data?.candidates?.[0]?.content?.parts || [];
-      for (const part of parts) {
-        if (part.inlineData?.data) {
-          console.log(`Image generated successfully via Google AI Studio (${model})`);
-          return { base64: part.inlineData.data, mimeType: part.inlineData.mimeType || "image/png" };
-        }
-      }
-      console.warn(`${model} returned no image data, parts:`, JSON.stringify(parts.map(p => ({ hasInlineData: !!p.inlineData, hasText: !!p.text })))); 
-      console.warn(`Trying next model...`);
-    } catch (e) {
-      console.error(`generateImageViaGoogleDirect (${model}) error:`, e);
+    );
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error(`Google AI Studio error (${IMAGE_MODEL_FALLBACK}): ${resp.status}`, errText);
+      return null;
     }
+    const data = await resp.json();
+    const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> =
+      data?.candidates?.[0]?.content?.parts || [];
+    for (const part of parts) {
+      if (part.inlineData?.data) {
+        console.log(`Image generated successfully via Google AI Studio (${IMAGE_MODEL_FALLBACK})`);
+        return { base64: part.inlineData.data, mimeType: part.inlineData.mimeType || "image/png" };
+      }
+    }
+    console.warn(`${IMAGE_MODEL_FALLBACK} returned no image data`);
+    return null;
+  } catch (e) {
+    console.error(`generateImageViaGoogleDirect error:`, e);
+    return null;
   }
+}
+
+// ── Combined image generation: Gateway first, then Google AI Studio ──────────
+async function generateImage(
+  prompt: string,
+  lovableApiKey: string,
+  googleApiKey: string | null
+): Promise<{ base64: string; mimeType: string } | null> {
+  // Try Lovable Gateway (gemini-3-pro-image-preview) first
+  const gatewayResult = await generateImageViaGateway(prompt, lovableApiKey);
+  if (gatewayResult) return gatewayResult;
+
+  // Fallback to Google AI Studio (gemini-2.5-flash-image)
+  if (googleApiKey) {
+    return await generateImageViaGoogleDirect(prompt, googleApiKey);
+  }
+
+  console.error("All image generation methods failed");
   return null;
 }
 
@@ -481,30 +537,23 @@ serve(async (req) => {
         );
       }
 
-      // Get GOOGLE_API_KEY from env or api_configs table
+      // Get GOOGLE_API_KEY from env or api_configs table (used as fallback)
       const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY") ||
         await supabase.from("api_configs").select("key_value").eq("key_name", "GOOGLE_API_KEY").eq("is_active", true).maybeSingle()
           .then(({ data }) => data?.key_value || null);
 
-      if (!GOOGLE_API_KEY) {
-        return new Response(
-          JSON.stringify({ error: "GOOGLE_API_KEY não configurada. Configure no painel de Secrets do Supabase ou na tabela api_configs." }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      console.log(`${agentName}: generating ${numImages} image(s) via Google AI Studio (gemini-2.0-flash-exp)`);
+      console.log(`${agentName}: generating ${numImages} image(s) — primary: Lovable Gateway (${IMAGE_MODEL_PRIMARY}), fallback: Google AI Studio (${IMAGE_MODEL_FALLBACK})`);
 
       const imagePrompt = buildImagePrompt(lastUserMessage.content, fullSystemPrompt, agentName);
 
       let results: Array<{ base64: string; mimeType: string } | null> = [];
       try {
         const requests = Array.from({ length: numImages }, () =>
-          generateImageViaGoogleDirect(imagePrompt, GOOGLE_API_KEY as string)
+          generateImage(imagePrompt, LOVABLE_API_KEY, GOOGLE_API_KEY as string | null)
         );
         results = await Promise.all(requests);
       } catch (err) {
-        console.error("Google AI Studio batch error:", err);
+        console.error("Image generation batch error:", err);
       }
 
       const imageUrls: string[] = [];
@@ -522,12 +571,12 @@ serve(async (req) => {
 
       if (imageUrls.length === 0) {
         return new Response(
-          JSON.stringify({ error: "Falha ao gerar imagem via Google AI Studio. Verifique se a GOOGLE_API_KEY é válida e se o modelo gemini-2.0-flash-exp está disponível na sua conta." }),
+          JSON.stringify({ error: "Falha ao gerar imagem. Verifique os logs para detalhes." }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      console.log(`${agentName}: got ${imageUrls.length} image(s) from Google AI Studio`);
+      console.log(`${agentName}: got ${imageUrls.length} image(s) successfully`);
 
       if (userId) {
         for (let i = 0; i < numImages; i++) {
