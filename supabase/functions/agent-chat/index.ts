@@ -45,8 +45,8 @@ const IMAGE_MODEL = "google/gemini-2.5-flash-image"; // kept for usage log label
 
 // ── Image generation via Google AI Studio direct (GOOGLE_API_KEY) ─────────────
 const GOOGLE_IMAGE_MODELS = [
-  "gemini-2.5-flash-image",           // Nano Banana — primary
-  "gemini-3-pro-image-preview",       // Gemini 3 Pro Image Preview — fallback
+  "gemini-3-pro-image-preview",       // Gemini 3 Pro Image Preview — primary
+  "gemini-2.5-flash-image",           // Nano Banana — fallback
 ];
 
 async function generateImageViaGoogleDirect(
@@ -56,6 +56,19 @@ async function generateImageViaGoogleDirect(
   for (const model of GOOGLE_IMAGE_MODELS) {
     try {
       console.log(`Trying Google AI Studio model: ${model}`);
+
+      // gemini-3-pro-image-preview requires IMAGE-only modality
+      const modalities = model.includes("gemini-3-pro")
+        ? ["IMAGE"]
+        : ["TEXT", "IMAGE"];
+
+      const bodyPayload: Record<string, unknown> = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseModalities: modalities,
+        },
+      };
+
       const resp = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
         {
@@ -64,12 +77,7 @@ async function generateImageViaGoogleDirect(
             "Content-Type": "application/json",
             "x-goog-api-key": googleApiKey,
           },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseModalities: ["TEXT", "IMAGE"],
-            },
-          }),
+          body: JSON.stringify(bodyPayload),
         }
       );
       if (!resp.ok) {
@@ -86,7 +94,8 @@ async function generateImageViaGoogleDirect(
           return { base64: part.inlineData.data, mimeType: part.inlineData.mimeType || "image/png" };
         }
       }
-      console.warn(`${model} returned no image data. Trying next...`);
+      console.warn(`${model} returned no image data, parts:`, JSON.stringify(parts.map(p => ({ hasInlineData: !!p.inlineData, hasText: !!p.text })))); 
+      console.warn(`Trying next model...`);
     } catch (e) {
       console.error(`generateImageViaGoogleDirect (${model}) error:`, e);
     }
