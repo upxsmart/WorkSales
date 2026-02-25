@@ -12,7 +12,7 @@ const plans = [
     highlight: false,
     badge: null,
     features: [
-      "3 Agentes de IA (AA-D100, AO-GO, AM-CC)",
+      "3 Agentes de IA (Luna, Atlas e Verso)",
       "Modelo Haiku 4.5 (rápido)",
       "1 projeto ativo",
       "Outputs básicos",
@@ -28,11 +28,11 @@ const plans = [
     badge: "MAIS POPULAR",
     trialDays: 7,
     features: [
-      "Todos os 7 Agentes de IA",
+      "Todos os 9 Agentes de IA",
       "Modelo Sonnet 4.5 (avançado)",
       "5 projetos ativos",
       "Outputs completos + versões",
-      "Orquestrador ACO incluso",
+      "Orquestrador Maestro incluso",
       "Suporte prioritário",
     ],
   },
