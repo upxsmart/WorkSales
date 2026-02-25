@@ -53,7 +53,7 @@ async function callAgentAI(
           { role: "user", content: userMessage },
         ],
         stream: false,
-        max_tokens: 2048,
+        max_tokens: 8192,
       }),
     }
   );

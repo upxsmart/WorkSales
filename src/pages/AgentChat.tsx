@@ -406,8 +406,8 @@ const AgentChat = () => {
                   animate={{ opacity: 1, scale: 1, x: 0 }}
                   className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-[11px] font-medium shrink-0"
                 >
-                  <ArrowRightLeft className="w-3 h-3" />
-                  Briefing recebido do AC-DC
+                   <ArrowRightLeft className="w-3 h-3" />
+                   Briefing recebido do Pixel
                 </motion.div>
               )}
             </div>
@@ -583,10 +583,10 @@ const AgentChat = () => {
                              variant="ghost"
                              className="text-xs h-7 text-primary/70 hover:text-primary hover:bg-primary/10"
                              onClick={() => handleSendToAgImg(msg.content)}
-                             title="Abre o AG-IMG com este briefing pré-preenchido"
-                           >
-                             <ExternalLink className="w-3 h-3 mr-1" />
-                             Enviar para AG-IMG
+                              title="Abre o Canvas com este briefing pré-preenchido"
+                            >
+                              <ExternalLink className="w-3 h-3 mr-1" />
+                              Enviar para Canvas
                            </Button>
                          )}
                        </div>
@@ -600,6 +600,7 @@ const AgentChat = () => {
                 </motion.div>
               ))}
 
+              {/* Typing indicator — shown before first token arrives */}
               {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
@@ -611,18 +612,16 @@ const AgentChat = () => {
                   </div>
                   {agentCode === "AG-IMG" ? (
                     <div className="glass rounded-2xl px-5 py-4 flex flex-col gap-3 min-w-[260px]">
-                      {/* Animated banana icon row */}
                       <div className="flex items-center gap-2.5">
                         <div className="relative flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-600 shrink-0">
                           <ImagePlay className="w-4 h-4 text-white" />
                           <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-primary animate-ping" />
                         </div>
                         <div>
-                          <p className="text-xs font-semibold text-foreground leading-tight">Gerando criativo com Nano Banana...</p>
+                          <p className="text-xs font-semibold text-foreground leading-tight">Canvas está gerando seu criativo...</p>
                           <p className="text-[10px] text-muted-foreground mt-0.5">Google Gemini Image · Alta definição</p>
                         </div>
                       </div>
-                      {/* Animated progress bar */}
                       <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
                         <motion.div
                           className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500"
@@ -631,7 +630,6 @@ const AgentChat = () => {
                           transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
                         />
                       </div>
-                      {/* Shimmer cards */}
                       <div className={`grid gap-2 ${imageCount > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
                         {Array.from({ length: imageCount }).map((_, k) => (
                           <div key={k} className="rounded-lg overflow-hidden aspect-square bg-muted/60 relative">
@@ -648,12 +646,24 @@ const AgentChat = () => {
                   ) : agentCode === "AC-DC" ? (
                     <div className="glass rounded-2xl px-4 py-3 flex items-center gap-2">
                       <ImageIcon className="w-4 h-4 animate-pulse text-primary" />
-                      <span className="text-xs text-muted-foreground">Gerando criativo com Banana Pro...</span>
+                      <span className="text-xs text-muted-foreground">Pixel está criando seu visual...</span>
                     </div>
                   ) : (
                     <div className="glass rounded-2xl px-4 py-3 flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">Digitando...</span>
+                      <div className={`w-5 h-5 rounded-full bg-gradient-to-br ${agent.color} flex items-center justify-center shrink-0`}>
+                        <AgentIcon className="w-3 h-3 text-white" />
+                      </div>
+                      <span className="text-xs text-muted-foreground">{agent.name} está pensando</span>
+                      <motion.div className="flex gap-0.5 ml-1">
+                        {[0, 1, 2].map((dot) => (
+                          <motion.span
+                            key={dot}
+                            className="w-1.5 h-1.5 rounded-full bg-primary/60"
+                            animate={{ opacity: [0.3, 1, 0.3] }}
+                            transition={{ duration: 1, delay: dot * 0.2, repeat: Infinity }}
+                          />
+                        ))}
+                      </motion.div>
                     </div>
                   )}
                 </motion.div>

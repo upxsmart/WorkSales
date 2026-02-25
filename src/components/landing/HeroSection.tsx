@@ -66,7 +66,15 @@ const HeroSection = () => {
             Começar Agora
             <ArrowRight className="ml-2 w-5 h-5" />
           </Button>
-          <Button variant="outline" size="lg" className="px-8 py-6 text-lg border-border/50 hover:border-primary/50">
+          <Button
+            variant="outline"
+            size="lg"
+            className="px-8 py-6 text-lg border-border/50 hover:border-primary/50"
+            onClick={() => {
+              const el = document.getElementById("how-it-works");
+              if (el) el.scrollIntoView({ behavior: "smooth" });
+            }}
+          >
             Ver Demonstração
           </Button>
         </motion.div>
