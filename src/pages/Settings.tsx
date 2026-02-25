@@ -41,17 +41,23 @@ const Settings = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setEmail(user.email || "");
     supabase
       .from("profiles")
       .select("name, plan")
       .eq("user_id", user.id)
       .single()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (data) {
           setName(data.name);
           setPlan(data.plan);
+        }
+        if (error) {
+          console.error("Settings: failed to load profile", error);
         }
         setLoading(false);
       });
