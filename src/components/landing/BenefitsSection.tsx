@@ -1,36 +1,60 @@
 import { motion } from "framer-motion";
-import { Users, Target, Zap, BarChart3, MessageSquare, Palette } from "lucide-react";
+import { Users, Target, Zap, MessageSquare, PenTool, Palette, Megaphone, ImagePlay, Brain } from "lucide-react";
 
 const benefits = [
   {
     icon: Users,
-    title: "Personas Profundas",
-    description: "Micro-personas com dores, desejos, objeções e gatilhos de compra gerados por IA.",
+    agent: "Luna",
+    title: "Audiência & Personas",
+    description: "Luna investiga seu público a fundo: micro-personas, Dream 100 e mapa de dores × desejos.",
   },
   {
     icon: Target,
-    title: "Ofertas Irresistíveis",
-    description: "Grand Slam Offers com Escada de Valor completa usando a equação de Hormozi.",
+    agent: "Atlas",
+    title: "Ofertas Grand Slam",
+    description: "Atlas constrói ofertas irresistíveis com Escada de Valor e equação de Hormozi.",
   },
   {
     icon: Zap,
-    title: "Funil Automatizado",
-    description: "Jornada do lead com gatilhos comportamentais, email sequences e lead scoring.",
+    agent: "Flux",
+    title: "Funil Inteligente",
+    description: "Flux projeta funis com gatilhos comportamentais, sequências de email e lead scoring.",
   },
   {
-    icon: MessageSquare,
-    title: "Engajamento Humanizado",
-    description: "Scripts de Epiphany Bridge e fluxos de conversa com qualificação BANT.",
-  },
-  {
-    icon: BarChart3,
+    icon: PenTool,
+    agent: "Verso",
     title: "Copy que Converte",
-    description: "Páginas de venda, sequências de email, hooks de anúncio e scripts de vídeo.",
+    description: "Verso escreve páginas de venda, hooks virais, VSL e sequências de email de alta conversão.",
   },
   {
     icon: Palette,
-    title: "Criativos Profissionais",
-    description: "Briefings visuais completos, prompts de imagem e specs por plataforma.",
+    agent: "Pixel",
+    title: "Criativos & Identidade",
+    description: "Pixel dirige sua identidade visual com briefings, prompts de IA e specs por plataforma.",
+  },
+  {
+    icon: MessageSquare,
+    agent: "Closer",
+    title: "Scripts de Vendas",
+    description: "Closer cria scripts de Epiphany Bridge e fluxos de conversa com qualificação BANT.",
+  },
+  {
+    icon: Megaphone,
+    agent: "Radar",
+    title: "Tráfego Pago",
+    description: "Radar planeja e otimiza suas campanhas Meta Ads com foco em CPL, ROAS e conversão.",
+  },
+  {
+    icon: ImagePlay,
+    agent: "Canvas",
+    title: "Imagens HD",
+    description: "Canvas transforma briefings em criativos publicitários prontos para publicar.",
+  },
+  {
+    icon: Brain,
+    agent: "Maestro",
+    title: "Orquestração Total",
+    description: "Maestro coordena toda a equipe e compila seu plano completo de negócio digital.",
   },
 ];
 
@@ -46,11 +70,11 @@ const BenefitsSection = () => {
           className="text-center mb-16"
         >
           <h2 className="font-display text-3xl md:text-5xl font-bold mb-4">
-            Tudo que Você Precisa em{" "}
+            Sua Equipe de IA em{" "}
             <span className="text-accent">Um Ecossistema</span>
           </h2>
           <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-            6 capacidades integradas que transformam dados em resultados reais.
+            9 agentes especializados que trabalham juntos para construir seu negócio digital.
           </p>
         </motion.div>
 
@@ -61,11 +85,14 @@ const BenefitsSection = () => {
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
+              transition={{ delay: i * 0.08 }}
               className="glass glass-hover rounded-2xl p-6 group cursor-default"
             >
-              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
-                <benefit.icon className="w-6 h-6 text-primary" />
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                  <benefit.icon className="w-6 h-6 text-primary" />
+                </div>
+                <span className="text-xs font-display font-semibold text-accent uppercase tracking-wider">{benefit.agent}</span>
               </div>
               <h3 className="font-display text-xl font-semibold mb-2">{benefit.title}</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">{benefit.description}</p>
