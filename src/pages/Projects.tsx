@@ -168,23 +168,23 @@ const Projects = () => {
             <div className="space-y-4 mt-2">
               <div>
                 <Label>Nome do Projeto *</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Minha Agência Digital" />
+                <Input value={form.name} onChange={(e) => setForm(prev => ({ ...prev, name: e.target.value }))} placeholder="Ex: Minha Agência Digital" />
               </div>
               <div>
                 <Label>Nicho de Atuação</Label>
-                <Input value={form.nicho} onChange={(e) => setForm({ ...form, nicho: e.target.value })} placeholder="Ex: Marketing Digital, Saúde, Educação" />
+                <Input value={form.nicho} onChange={(e) => setForm(prev => ({ ...prev, nicho: e.target.value }))} placeholder="Ex: Marketing Digital, Saúde, Educação" />
               </div>
               <div>
                 <Label>Objetivo Principal</Label>
-                <Textarea value={form.objetivo} onChange={(e) => setForm({ ...form, objetivo: e.target.value })} placeholder="Ex: Escalar vendas online para R$ 100k/mês" rows={2} />
+                <Textarea value={form.objetivo} onChange={(e) => setForm(prev => ({ ...prev, objetivo: e.target.value }))} placeholder="Ex: Escalar vendas online para R$ 100k/mês" rows={2} />
               </div>
               <div>
                 <Label>Público-Alvo</Label>
-                <Input value={form.publico_alvo} onChange={(e) => setForm({ ...form, publico_alvo: e.target.value })} placeholder="Ex: Empreendedores digitais 25-45 anos" />
+                <Input value={form.publico_alvo} onChange={(e) => setForm(prev => ({ ...prev, publico_alvo: e.target.value }))} placeholder="Ex: Empreendedores digitais 25-45 anos" />
               </div>
               <div>
                 <Label>Faturamento Atual</Label>
-                <Select value={form.faturamento} onValueChange={(v) => setForm({ ...form, faturamento: v })}>
+                <Select value={form.faturamento} onValueChange={(v) => setForm(prev => ({ ...prev, faturamento: v }))}>
                   <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     {FATURAMENTO_OPTIONS.map((opt) => (
@@ -195,12 +195,12 @@ const Projects = () => {
               </div>
               <div className="flex items-center justify-between">
                 <Label>Já possui produto?</Label>
-                <Switch checked={form.has_product} onCheckedChange={(v) => setForm({ ...form, has_product: v })} />
+                <Switch checked={form.has_product} onCheckedChange={(v) => setForm(prev => ({ ...prev, has_product: v }))} />
               </div>
               {form.has_product && (
                 <div>
                   <Label>Descrição do Produto</Label>
-                  <Textarea value={form.product_description} onChange={(e) => setForm({ ...form, product_description: e.target.value })} placeholder="Descreva seu produto ou serviço..." rows={3} />
+                  <Textarea value={form.product_description} onChange={(e) => setForm(prev => ({ ...prev, product_description: e.target.value }))} placeholder="Descreva seu produto ou serviço..." rows={3} />
                 </div>
               )}
               <Button onClick={handleSave} className="w-full">
