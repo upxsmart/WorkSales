@@ -6,19 +6,19 @@ const steps = [
     icon: Search,
     step: "01",
     title: "Diagnóstico",
-    description: "Responda 5 perguntas sobre seu negócio e o AA-D100 mapeia seu público, concorrência e oportunidades.",
+    description: "Responda 5 perguntas sobre seu negócio e a Luna mapeia seu público, concorrência e oportunidades.",
   },
   {
     icon: Cpu,
     step: "02",
     title: "Geração Integrada",
-    description: "Os 7 agentes trabalham em cadeia: personas → ofertas → funil → copy → criativos → orquestração.",
+    description: "9 agentes trabalham em cadeia: Luna → Atlas → Flux → Verso → Pixel → Canvas → Closer → Radar → Maestro.",
   },
   {
     icon: Rocket,
     step: "03",
     title: "Estrutura Completa",
-    description: "Receba sua estrutura digital completa: ofertas, funil, copy, criativos e plano de ação priorizado.",
+    description: "O Maestro compila tudo: ofertas, funil, copy, criativos e plano de ação priorizado.",
   },
 ];
 

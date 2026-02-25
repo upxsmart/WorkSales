@@ -2,6 +2,19 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { AGENTS_CONFIG } from "@/lib/agents";
+
+const HERO_AGENTS = [
+  { code: "AA-D100", emoji: "🔍" },
+  { code: "AO-GO", emoji: "💰" },
+  { code: "AJ-AF", emoji: "⚙️" },
+  { code: "AM-CC", emoji: "✍️" },
+  { code: "AC-DC", emoji: "🎨" },
+  { code: "AG-IMG", emoji: "🖌️" },
+  { code: "AE-C", emoji: "🤝" },
+  { code: "AT-GP", emoji: "📡" },
+  { code: "ACO", emoji: "🧠" },
+] as const;
 
 const HeroSection = () => {
   const navigate = useNavigate();
@@ -29,7 +42,7 @@ const HeroSection = () => {
           className="font-display text-5xl md:text-7xl font-bold leading-tight mb-6"
         >
           Construa Seu Império Digital com{" "}
-          <span className="gradient-text">7 Agentes de IA</span>
+          <span className="gradient-text">9 Agentes de IA</span>
         </motion.h1>
 
         <motion.p
@@ -38,8 +51,8 @@ const HeroSection = () => {
           transition={{ duration: 0.7, delay: 0.2 }}
           className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto mb-10 leading-relaxed"
         >
-          Do diagnóstico de audiência à orquestração completa do funil — 
-          7 agentes especializados trabalham em ecossistema para criar sua 
+          Da Luna (audiência) ao Maestro (orquestração) — 
+          9 agentes especializados trabalham em ecossistema para criar sua 
           estrutura de negócio digital completa.
         </motion.p>
 
@@ -65,17 +78,21 @@ const HeroSection = () => {
           transition={{ duration: 1, delay: 0.5 }}
           className="mt-20 relative"
         >
-          <div className="grid grid-cols-4 md:grid-cols-7 gap-3 max-w-2xl mx-auto">
-            {["AA-D100", "AO-GO", "AJ-AF", "AE-C", "AM-CC", "AC-DC", "ACO"].map((code, i) => (
-              <motion.div
-                key={code}
-                animate={{ y: [0, -8, 0] }}
-                transition={{ duration: 2.5, delay: i * 0.2, repeat: Infinity, ease: "easeInOut" }}
-                className="glass rounded-xl p-3 text-center glow-primary"
-              >
-                <span className="text-xs font-display font-bold text-primary">{code}</span>
-              </motion.div>
-            ))}
+          <div className="grid grid-cols-3 md:grid-cols-5 gap-3 max-w-3xl mx-auto">
+            {HERO_AGENTS.map(({ code, emoji }, i) => {
+              const agent = AGENTS_CONFIG[code as keyof typeof AGENTS_CONFIG];
+              return (
+                <motion.div
+                  key={code}
+                  animate={{ y: [0, -8, 0] }}
+                  transition={{ duration: 2.5, delay: i * 0.15, repeat: Infinity, ease: "easeInOut" }}
+                  className="glass rounded-xl p-3 text-center glow-primary"
+                >
+                  <span className="text-lg mb-1 block">{emoji}</span>
+                  <span className="text-xs font-display font-bold text-primary">{agent.name}</span>
+                </motion.div>
+              );
+            })}
           </div>
         </motion.div>
       </div>
