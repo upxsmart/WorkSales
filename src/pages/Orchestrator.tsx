@@ -275,9 +275,8 @@ const Orchestrator = () => {
       o.output_type === "orchestrator_draft" || o.output_type === "master_plan"
     );
 
-    for (const output of orchestratorOutputs) {
-      await supabase.from("agent_outputs").update({ is_approved: true }).eq("id", output.id);
-    }
+    const outputIds = orchestratorOutputs.map(o => o.id);
+    await supabase.rpc("bulk_approve_agent_outputs", { _output_ids: outputIds });
     await loadRunAndOutputs();
     toast({ title: "✅ Todos aprovados!", description: "Outputs disponíveis para os agentes." });
   };

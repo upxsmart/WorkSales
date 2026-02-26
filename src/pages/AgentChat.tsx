@@ -186,9 +186,12 @@ const AgentChat = () => {
               format: selectedFormat,
               prompt: userMsg.content,
             },
-            is_approved: true,
+            is_approved: false,
             version: outputs.length + 1,
-          }).then(() => {
+          }).select().then(async ({ data: insertedRows }) => {
+            if (insertedRows?.[0]?.id) {
+              await supabase.rpc("approve_agent_output", { _output_id: insertedRows[0].id });
+            }
             // Reload outputs list after saving
             supabase
               .from("agent_outputs")
@@ -270,15 +273,18 @@ const AgentChat = () => {
 
   const handleApproveOutput = useCallback(async (content: string) => {
     if (!projectId || !agentCode) return;
-    const { error } = await supabase.from("agent_outputs").insert({
+    const { data: inserted, error } = await supabase.from("agent_outputs").insert({
       project_id: projectId,
       agent_name: agentCode,
       output_type: "general",
       title: `Output ${agentCode}`,
       output_data: { content },
-      is_approved: true,
+      is_approved: false,
       version: outputs.length + 1,
-    });
+    }).select();
+    if (!error && inserted?.[0]?.id) {
+      await supabase.rpc("approve_agent_output", { _output_id: inserted[0].id });
+    }
     if (error) {
       toast({ title: "Erro", description: "Não foi possível salvar o output.", variant: "destructive" });
     } else {
@@ -334,15 +340,18 @@ const AgentChat = () => {
     // Create a new version based on this old one
     if (!projectId || !agentCode) return;
     const newVersion = outputs.length + 1;
-    const { error } = await supabase.from("agent_outputs").insert({
+    const { data: inserted, error } = await supabase.from("agent_outputs").insert({
       project_id: projectId,
       agent_name: agentCode,
       output_type: output.output_type,
       title: `${output.title} (revertido)`,
       output_data: { content },
-      is_approved: true,
+      is_approved: false,
       version: newVersion,
-    });
+    }).select();
+    if (!error && inserted?.[0]?.id) {
+      await supabase.rpc("approve_agent_output", { _output_id: inserted[0].id });
+    }
     if (error) {
       toast({ title: "Erro", description: "Não foi possível reverter.", variant: "destructive" });
     } else {
