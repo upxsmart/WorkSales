@@ -258,29 +258,57 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, agentName, projectId, projectContext, imageCount } = await req.json();
-    const numImages = Math.min(Math.max(Number(imageCount) || 1, 1), 4);
-
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    // ── Auth (REQUIRED) ─────────────────────────────────────────────
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // ── Auth ────────────────────────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    let userId: string | null = null;
-    let userProfile: Record<string, unknown> = {};
-
     const authResult = await getUserFromAuth(supabase, authHeader);
-    if (authResult) {
-      userId = authResult.userId;
-      userProfile = authResult.profile;
+    if (!authResult) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
+    const userId = authResult.userId;
+    const userProfile = authResult.profile;
+
+    const { messages, agentName, projectId, projectContext, imageCount } = await req.json();
+
+    // ── Input validation ────────────────────────────────────────────
+    if (!Array.isArray(messages) || messages.length === 0 || messages.length > 100) {
+      return new Response(JSON.stringify({ error: "Mensagens inválidas" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!agentName || typeof agentName !== "string" || agentName.length > 20) {
+      return new Response(JSON.stringify({ error: "agentName inválido" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // Validate each message
+    for (const msg of messages) {
+      if (!msg.role || !msg.content || typeof msg.content !== "string" || msg.content.length > 50000) {
+        return new Response(JSON.stringify({ error: "Mensagem inválida ou muito longa" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    const numImages = Math.min(Math.max(Number(imageCount) || 1, 1), 4);
+
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
     // ── Usage limit check ───────────────────────────────────────────
-    if (userId && userProfile && Object.keys(userProfile).length > 0) {
+    if (userProfile && Object.keys(userProfile).length > 0) {
       const isImage = IMAGE_AGENTS.has(agentName);
       const usedField = isImage ? "creatives_used" : "interactions_used";
       const limitField = isImage ? "creatives_limit" : "interactions_limit";
@@ -511,10 +539,8 @@ serve(async (req) => {
 
       console.log(`${agentName}: got ${imageUrls.length} image(s) successfully`);
 
-      if (userId) {
-        for (let i = 0; i < numImages; i++) {
-          await incrementUsage(supabase, userId, agentName, projectId, true);
-        }
+      for (let i = 0; i < numImages; i++) {
+        await incrementUsage(supabase, userId, agentName, projectId, true);
       }
 
       return new Response(
@@ -568,7 +594,7 @@ serve(async (req) => {
           const userMsgs = apiMessages.filter((m: { role: string }) => m.role !== "system");
           const fallbackStream = await generateTextViaAnthropic(systemContent, userMsgs, ANTHROPIC_API_KEY);
           if (fallbackStream) {
-            if (userId) incrementUsage(supabase, userId, agentName, projectId, false);
+            incrementUsage(supabase, userId, agentName, projectId, false);
             return new Response(fallbackStream, {
               headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
             });
@@ -587,9 +613,7 @@ serve(async (req) => {
       );
     }
 
-    if (userId) {
-      incrementUsage(supabase, userId, agentName, projectId, false);
-    }
+    incrementUsage(supabase, userId, agentName, projectId, false);
 
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
