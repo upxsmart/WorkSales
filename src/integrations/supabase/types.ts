@@ -810,6 +810,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      decrypt_sensitive: { Args: { cipher_text: string }; Returns: string }
+      encrypt_sensitive: { Args: { plain_text: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
