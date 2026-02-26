@@ -40,7 +40,7 @@ function outputToText(out: { title?: string; output_type?: string; output_data: 
 
 // Agents that generate images
 const IMAGE_AGENTS = new Set(["AC-DC", "AG-IMG"]);
-const TEXT_MODEL = "google/gemini-3-flash-preview";
+const TEXT_MODEL = "gemini-2.5-flash";
 const IMAGE_MODEL = "gemini-2.5-flash-image";
 
 // ── Image generation via Google AI Studio direct (GOOGLE_API_KEY) ─────────────
@@ -378,8 +378,10 @@ serve(async (req) => {
 
     const numImages = Math.min(Math.max(Number(imageCount) || 1, 1), 4);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const GOOGLE_API_KEY_TEXT = Deno.env.get("GOOGLE_API_KEY") ||
+      await supabase.from("api_configs").select("key_value").eq("key_name", "GOOGLE_API_KEY").eq("is_active", true).maybeSingle()
+        .then(({ data }) => data?.key_value || null);
+    if (!GOOGLE_API_KEY_TEXT) throw new Error("GOOGLE_API_KEY is not configured");
 
     // ── Usage limit check ───────────────────────────────────────────
     if (userProfile && Object.keys(userProfile).length > 0) {
@@ -635,79 +637,41 @@ serve(async (req) => {
 
 
     // ═══════════════════════════════════════════════════════════════
-    // All other agents: Streaming text via Lovable AI Gateway
-    // Fallback: Anthropic on 402/429
+    // All other agents: Streaming text via Google Gemini (primary)
+    // Fallback: Anthropic
     // ═══════════════════════════════════════════════════════════════
-    const apiMessages = [
-      { role: "system", content: fullSystemPrompt },
-      ...messages.map((m: { role: string; content: string }) => ({
-        role: m.role === "user" ? "user" : "assistant",
-        content: m.content,
-      })),
-    ];
+    const userMsgs = messages.map((m: { role: string; content: string }) => ({
+      role: m.role === "user" ? "user" : "assistant",
+      content: m.content,
+    }));
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: TEXT_MODEL,
-        messages: apiMessages,
-        stream: true,
-      }),
-    });
-
-    if (!response.ok) {
-      if (response.status === 402 || response.status === 429) {
-        const systemContent = apiMessages.find((m: { role: string }) => m.role === "system")?.content || fullSystemPrompt;
-        const userMsgs = apiMessages.filter((m: { role: string }) => m.role !== "system");
-
-        // Fallback 1: Anthropic
-        const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-        if (ANTHROPIC_API_KEY) {
-          console.log(`Gateway returned ${response.status}, falling back to Anthropic`);
-          const fallbackStream = await generateTextViaAnthropic(systemContent, userMsgs, ANTHROPIC_API_KEY);
-          if (fallbackStream) {
-            incrementUsage(supabase, userId, agentName, projectId, false);
-            return new Response(fallbackStream, {
-              headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-            });
-          }
-        }
-
-        // Fallback 2: Google Gemini
-        const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY");
-        if (GOOGLE_API_KEY) {
-          console.log(`Anthropic fallback failed, trying Google Gemini`);
-          const geminiStream = await generateTextViaGoogle(systemContent, userMsgs, GOOGLE_API_KEY);
-          if (geminiStream) {
-            incrementUsage(supabase, userId, agentName, projectId, false);
-            return new Response(geminiStream, {
-              headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-            });
-          }
-        }
-
-        return new Response(
-          JSON.stringify({ error: "Todos os provedores de IA falharam. Tente novamente em alguns instantes." }),
-          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const t = await response.text();
-      console.error("AI Gateway error:", response.status, t);
-      return new Response(
-        JSON.stringify({ error: "Erro na API de IA" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Primary: Google Gemini
+    console.log(`Using Google Gemini (${TEXT_MODEL}) as primary for ${agentName}`);
+    const geminiStream = await generateTextViaGoogle(fullSystemPrompt, userMsgs, GOOGLE_API_KEY_TEXT as string);
+    if (geminiStream) {
+      incrementUsage(supabase, userId, agentName, projectId, false);
+      return new Response(geminiStream, {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
     }
 
-    incrementUsage(supabase, userId, agentName, projectId, false);
+    // Fallback: Anthropic
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (ANTHROPIC_API_KEY) {
+      console.log(`Google Gemini failed, falling back to Anthropic for ${agentName}`);
+      const anthropicStream = await generateTextViaAnthropic(fullSystemPrompt, userMsgs, ANTHROPIC_API_KEY);
+      if (anthropicStream) {
+        incrementUsage(supabase, userId, agentName, projectId, false);
+        return new Response(anthropicStream, {
+          headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+        });
+      }
+    }
 
-    return new Response(response.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-    });
+    return new Response(
+      JSON.stringify({ error: "Todos os provedores de IA falharam. Tente novamente em alguns instantes." }),
+      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (e) {
     console.error("agent-chat error:", e);
     return new Response(
