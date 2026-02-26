@@ -130,7 +130,12 @@ serve(async (req) => {
       });
     }
 
-    const accessToken = connection.access_token;
+    // Decrypt access_token if encrypted
+    let accessToken = connection.access_token;
+    if (accessToken && accessToken.startsWith("enc:")) {
+      const { data: decrypted } = await supabase.rpc("decrypt_sensitive", { cipher_text: accessToken });
+      accessToken = (decrypted as string) || accessToken;
+    }
     const adAccountId = connection.ad_account_id;
 
     let result: Response;

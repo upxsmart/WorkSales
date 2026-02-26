@@ -378,9 +378,15 @@ serve(async (req) => {
 
     const numImages = Math.min(Math.max(Number(imageCount) || 1, 1), 4);
 
-    const GOOGLE_API_KEY_TEXT = Deno.env.get("GOOGLE_API_KEY") ||
-      await supabase.from("api_configs").select("key_value").eq("key_name", "GOOGLE_API_KEY").eq("is_active", true).maybeSingle()
-        .then(({ data }) => data?.key_value || null);
+    let GOOGLE_API_KEY_TEXT = Deno.env.get("GOOGLE_API_KEY");
+    if (!GOOGLE_API_KEY_TEXT) {
+      const { data: configRow } = await supabase.from("api_configs").select("key_value").eq("key_name", "GOOGLE_API_KEY").eq("is_active", true).maybeSingle();
+      if (configRow?.key_value) {
+        // Decrypt if encrypted
+        const { data: decrypted } = await supabase.rpc("decrypt_sensitive", { cipher_text: configRow.key_value });
+        GOOGLE_API_KEY_TEXT = (decrypted as string) || configRow.key_value;
+      }
+    }
     if (!GOOGLE_API_KEY_TEXT) throw new Error("GOOGLE_API_KEY is not configured");
 
     // ── Usage limit check ───────────────────────────────────────────
@@ -568,9 +574,14 @@ serve(async (req) => {
         );
       }
 
-      const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY") ||
-        await supabase.from("api_configs").select("key_value").eq("key_name", "GOOGLE_API_KEY").eq("is_active", true).maybeSingle()
-          .then(({ data }) => data?.key_value || null);
+      let GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY");
+      if (!GOOGLE_API_KEY) {
+        const { data: configRow } = await supabase.from("api_configs").select("key_value").eq("key_name", "GOOGLE_API_KEY").eq("is_active", true).maybeSingle();
+        if (configRow?.key_value) {
+          const { data: decrypted } = await supabase.rpc("decrypt_sensitive", { cipher_text: configRow.key_value });
+          GOOGLE_API_KEY = (decrypted as string) || configRow.key_value;
+        }
+      }
 
       if (!GOOGLE_API_KEY) {
         return new Response(
