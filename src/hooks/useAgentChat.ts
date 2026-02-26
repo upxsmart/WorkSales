@@ -106,6 +106,11 @@ export function useAgentChat() {
           setIsLoading(false);
           return;
         }
+        if (resp.status === 503) {
+          toast({ title: "IA indisponível", description: "Todos os provedores estão temporariamente indisponíveis. Tente novamente.", variant: "destructive" });
+          setIsLoading(false);
+          return;
+        }
         if (!resp.ok) throw new Error("Falha ao conectar com IA");
 
         // AC-DC returns image JSON (X-Response-Type: image), others stream SSE
