@@ -159,6 +159,80 @@ async function generateTextViaAnthropic(
   }
 }
 
+// ── Google Gemini fallback for text generation ──────────────────────────────
+async function generateTextViaGoogle(
+  systemPrompt: string,
+  messages: Array<{ role: string; content: string }>,
+  googleApiKey: string
+): Promise<ReadableStream | null> {
+  try {
+    const geminiMessages = messages.map((m) => ({
+      role: m.role === "user" ? "user" : "model",
+      parts: [{ text: m.content }],
+    }));
+
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${googleApiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: geminiMessages,
+          generationConfig: { maxOutputTokens: 4096 },
+        }),
+      }
+    );
+
+    if (!resp.ok) {
+      console.error("Google Gemini text error:", resp.status, await resp.text());
+      return null;
+    }
+
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    (async () => {
+      const reader = resp.body!.getReader();
+      let buffer = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let idx: number;
+          while ((idx = buffer.indexOf("\n")) !== -1) {
+            const line = buffer.slice(0, idx).replace(/\r$/, "");
+            buffer = buffer.slice(idx + 1);
+            if (!line.startsWith("data: ")) continue;
+            const jsonStr = line.slice(6).trim();
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) {
+                const chunk = { choices: [{ delta: { content: text } }] };
+                await writer.write(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              }
+              if (parsed?.candidates?.[0]?.finishReason) {
+                await writer.write(encoder.encode("data: [DONE]\n\n"));
+              }
+            } catch { /* ignore */ }
+          }
+        }
+      } finally {
+        await writer.close();
+      }
+    })();
+
+    return readable;
+  } catch (e) {
+    console.error("generateTextViaGoogle error:", e);
+    return null;
+  }
+}
+
 const PLAN_LIMITS: Record<string, number> = {
   starter: 100,
   professional: 500,
@@ -587,11 +661,13 @@ serve(async (req) => {
 
     if (!response.ok) {
       if (response.status === 402 || response.status === 429) {
+        const systemContent = apiMessages.find((m: { role: string }) => m.role === "system")?.content || fullSystemPrompt;
+        const userMsgs = apiMessages.filter((m: { role: string }) => m.role !== "system");
+
+        // Fallback 1: Anthropic
         const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
         if (ANTHROPIC_API_KEY) {
           console.log(`Gateway returned ${response.status}, falling back to Anthropic`);
-          const systemContent = apiMessages.find((m: { role: string }) => m.role === "system")?.content || fullSystemPrompt;
-          const userMsgs = apiMessages.filter((m: { role: string }) => m.role !== "system");
           const fallbackStream = await generateTextViaAnthropic(systemContent, userMsgs, ANTHROPIC_API_KEY);
           if (fallbackStream) {
             incrementUsage(supabase, userId, agentName, projectId, false);
@@ -600,9 +676,23 @@ serve(async (req) => {
             });
           }
         }
+
+        // Fallback 2: Google Gemini
+        const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY");
+        if (GOOGLE_API_KEY) {
+          console.log(`Anthropic fallback failed, trying Google Gemini`);
+          const geminiStream = await generateTextViaGoogle(systemContent, userMsgs, GOOGLE_API_KEY);
+          if (geminiStream) {
+            incrementUsage(supabase, userId, agentName, projectId, false);
+            return new Response(geminiStream, {
+              headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+            });
+          }
+        }
+
         return new Response(
-          JSON.stringify({ error: response.status === 402 ? "Créditos insuficientes. Adicione créditos ao workspace." : "Limite de requisições excedido. Tente novamente." }),
-          { status: response.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "Todos os provedores de IA falharam. Tente novamente em alguns instantes." }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       const t = await response.text();
