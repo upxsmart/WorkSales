@@ -98,8 +98,17 @@ const Projects = () => {
   };
 
   const handleSave = async () => {
-    if (!user || !form.name.trim()) {
+    if (!form.name.trim()) {
       toast({ title: "Erro", description: "Nome do projeto é obrigatório.", variant: "destructive" });
+      return;
+    }
+
+    // Busca sessão diretamente para funcionar mesmo sem AuthContext
+    const { data: { session } } = await supabase.auth.getSession();
+    const currentUser = user || session?.user;
+
+    if (!currentUser) {
+      toast({ title: "Erro", description: "Você precisa estar logado para criar projetos.", variant: "destructive" });
       return;
     }
 
@@ -111,7 +120,7 @@ const Projects = () => {
       faturamento: form.faturamento || null,
       has_product: form.has_product,
       product_description: form.has_product ? form.product_description || null : null,
-      user_id: user.id,
+      user_id: currentUser.id,
     };
 
     if (editingProject) {
