@@ -188,18 +188,9 @@ const AgentChat = () => {
             },
             is_approved: false,
             version: outputs.length + 1,
-          }).select().then(async ({ data: insertedRows }) => {
-            if (insertedRows?.[0]?.id) {
-              await supabase.rpc("approve_agent_output", { _output_id: insertedRows[0].id });
-            }
-            // Reload outputs list after saving
-            supabase
-              .from("agent_outputs")
-              .select("*")
-              .eq("project_id", projectId)
-              .eq("agent_name", agentCode)
-              .order("created_at", { ascending: false })
-              .then(({ data }) => { if (data) setOutputs(data as AgentOutput[]); });
+          }).select().then(async () => {
+            // Save as draft — user approves manually from history panel
+            await reloadOutputs();
           });
         }
       }
@@ -271,9 +262,21 @@ const AgentChat = () => {
     }
   };
 
-  const handleApproveOutput = useCallback(async (content: string) => {
+  const reloadOutputs = useCallback(async () => {
     if (!projectId || !agentCode) return;
-    const { data: inserted, error } = await supabase.from("agent_outputs").insert({
+    const { data } = await supabase
+      .from("agent_outputs")
+      .select("*")
+      .eq("project_id", projectId)
+      .eq("agent_name", agentCode)
+      .order("created_at", { ascending: false });
+    if (data) setOutputs(data as AgentOutput[]);
+  }, [projectId, agentCode]);
+
+  /** Save output as draft (is_approved = false) — user must explicitly approve later */
+  const handleSaveOutput = useCallback(async (content: string) => {
+    if (!projectId || !agentCode) return;
+    const { error } = await supabase.from("agent_outputs").insert({
       project_id: projectId,
       agent_name: agentCode,
       output_type: "general",
@@ -281,24 +284,35 @@ const AgentChat = () => {
       output_data: { content },
       is_approved: false,
       version: outputs.length + 1,
-    }).select();
-    if (!error && inserted?.[0]?.id) {
-      await supabase.rpc("approve_agent_output", { _output_id: inserted[0].id });
-    }
+    });
     if (error) {
       toast({ title: "Erro", description: "Não foi possível salvar o output.", variant: "destructive" });
     } else {
-      toast({ title: "Output aprovado! ✅", description: "Disponível para outros agentes." });
-      // Reload outputs
-      const { data } = await supabase
-        .from("agent_outputs")
-        .select("*")
-        .eq("project_id", projectId)
-        .eq("agent_name", agentCode)
-        .order("created_at", { ascending: false });
-      if (data) setOutputs(data as AgentOutput[]);
+      toast({ title: "Output salvo! 💾", description: "Clique em 'Aprovar' no histórico para disponibilizá-lo aos outros agentes." });
+      await reloadOutputs();
     }
-  }, [projectId, agentCode, outputs.length, toast]);
+  }, [projectId, agentCode, outputs.length, toast, reloadOutputs]);
+
+  /** Approve an existing output by ID via secure RPC */
+  const handleApproveById = useCallback(async (outputId: string) => {
+    const { error } = await supabase.rpc("approve_agent_output", { _output_id: outputId });
+    if (error) {
+      toast({ title: "Erro", description: "Não foi possível aprovar o output.", variant: "destructive" });
+    } else {
+      toast({ title: "Output aprovado! ✅", description: "Disponível para outros agentes." });
+      await reloadOutputs();
+      // Reload shared outputs too
+      if (projectId) {
+        const { data } = await supabase
+          .from("agent_outputs")
+          .select("*")
+          .eq("project_id", projectId)
+          .eq("is_approved", true)
+          .order("created_at", { ascending: false });
+        if (data) setAllOutputs(data as AgentOutput[]);
+      }
+    }
+  }, [toast, reloadOutputs, projectId]);
 
   const handleRefine = useCallback((content: string) => {
     setInput(`Refine e melhore o seguinte output:\n\n${content.slice(0, 500)}...`);
@@ -337,10 +351,9 @@ const AgentChat = () => {
     const content = typeof output.output_data === "object" && output.output_data !== null && "content" in (output.output_data as Record<string, unknown>)
       ? String((output.output_data as Record<string, unknown>).content)
       : JSON.stringify(output.output_data);
-    // Create a new version based on this old one
     if (!projectId || !agentCode) return;
     const newVersion = outputs.length + 1;
-    const { data: inserted, error } = await supabase.from("agent_outputs").insert({
+    const { error } = await supabase.from("agent_outputs").insert({
       project_id: projectId,
       agent_name: agentCode,
       output_type: output.output_type,
@@ -348,18 +361,14 @@ const AgentChat = () => {
       output_data: { content },
       is_approved: false,
       version: newVersion,
-    }).select();
-    if (!error && inserted?.[0]?.id) {
-      await supabase.rpc("approve_agent_output", { _output_id: inserted[0].id });
-    }
+    });
     if (error) {
       toast({ title: "Erro", description: "Não foi possível reverter.", variant: "destructive" });
     } else {
-      toast({ title: "Revertido! ↩️", description: `Versão ${output.version} restaurada como v${newVersion}.` });
-      const { data } = await supabase.from("agent_outputs").select("*").eq("project_id", projectId).eq("agent_name", agentCode).order("created_at", { ascending: false });
-      if (data) setOutputs(data as AgentOutput[]);
+      toast({ title: "Revertido! ↩️", description: `Versão ${output.version} restaurada como v${newVersion}. Aprove no histórico para ativar.` });
+      await reloadOutputs();
     }
-  }, [projectId, agentCode, outputs.length, toast]);
+  }, [projectId, agentCode, outputs.length, toast, reloadOutputs]);
 
   // Pré-preenche o input quando chegado via navegação com state (ex: AC-DC → AG-IMG)
   useEffect(() => {
@@ -575,8 +584,8 @@ const AgentChat = () => {
                            </Button>
                          ) : (
                            <>
-                             <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleApproveOutput(msg.content)}>
-                               <Check className="w-3 h-3 mr-1" /> Aprovar
+                             <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleSaveOutput(msg.content)}>
+                                <Check className="w-3 h-3 mr-1" /> Salvar
                              </Button>
                              <Button size="sm" variant="ghost" className="text-xs h-7" onClick={() => handleRefine(msg.content)}>
                                <RefreshCw className="w-3 h-3 mr-1" /> Refinar
@@ -821,8 +830,8 @@ const AgentChat = () => {
                   <div className="flex items-center justify-between">
                     <h3 className="font-display text-sm font-semibold">Último Output</h3>
                     <div className="flex gap-1">
-                      <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => handleApproveOutput(lastAssistantMsg.content)}>
-                        <Check className="w-3 h-3 mr-1" /> Aprovar
+                      <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => handleSaveOutput(lastAssistantMsg.content)}>
+                        <Check className="w-3 h-3 mr-1" /> Salvar
                       </Button>
                       <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => handleRefine(lastAssistantMsg.content)}>
                         <RefreshCw className="w-3 h-3 mr-1" /> Refinar
@@ -895,8 +904,8 @@ const AgentChat = () => {
               {outputs.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
                   <Clock className="w-12 h-12 mb-3 opacity-20" />
-                  <p className="text-sm">Nenhum output aprovado ainda.</p>
-                  <p className="text-xs mt-1">Aprove outputs do chat para salvá-los aqui.</p>
+                  <p className="text-sm">Nenhum output salvo ainda.</p>
+                  <p className="text-xs mt-1">Salve outputs do chat e aprove-os aqui para compartilhar com outros agentes.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -911,10 +920,14 @@ const AgentChat = () => {
                           </span>
                         </div>
                         <div className="flex items-center gap-1">
-                          {out.is_approved && (
+                          {out.is_approved ? (
                             <span className="text-xs text-primary flex items-center gap-1">
                               <Check className="w-3 h-3" /> Aprovado
                             </span>
+                          ) : (
+                            <Button size="sm" variant="outline" className="text-xs h-6 px-2 border-primary/50 text-primary hover:bg-primary/10" onClick={() => handleApproveById(out.id)}>
+                              <Check className="w-3 h-3 mr-1" /> Aprovar
+                            </Button>
                           )}
                           <Button size="sm" variant="ghost" className="text-xs h-6 px-2" onClick={() => handleRevert(out)} title="Reverter para esta versão">
                             <RotateCcw className="w-3 h-3" />
